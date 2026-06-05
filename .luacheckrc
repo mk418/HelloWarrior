@@ -61,6 +61,7 @@ read_globals = {
     "AutoCastShine_AutoCastStop",
     -- Inventory
     "GetInventoryItemTexture",
+    "GetInventoryItemLink",
     "IsEquippedItemType",
     -- Spell / ability info
     "GetSpellInfo",

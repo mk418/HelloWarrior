@@ -20,6 +20,11 @@ local RANGED_SLOT = 18  -- INVSLOT_RANGED
 local RANGED_MACRO = "/cast [worn:Guns] !Shoot Gun; [worn:Bows] !Shoot Bow; [worn:Crossbows] !Shoot Crossbow; [worn:Thrown] Throw"
 local RANGED_EMPTY_ICON = "Interface\\Icons\\Ability_Marksmanship"
 
+-- Off-hand swap toggle. INVSLOT_OFFHAND is 17; the glyph falls back to this
+-- generic icon until both ends of the toggle are saved (see AB:SaveOffhandSwap).
+local OFFHAND_SLOT = 17  -- INVSLOT_OFFHAND
+local SWAP_EMPTY_ICON = "Interface\\Icons\\Ability_Warrior_ShieldWall"
+
 -- True while `name`'s ability is queued for the next melee swing. Resolve the
 -- player's LEARNED-rank spellID straight from the name via GetSpellInfo's 7th
 -- return -- the same call the rest of the addon uses -- then ask IsCurrentSpell.
@@ -431,9 +436,9 @@ function AB:Build()
     local rows = math.ceil(maxAbil / ABILITIES_PER_ROW)
     local rowWidth = ABILITIES_PER_ROW * BUTTON_SIZE + (ABILITIES_PER_ROW - 1) * BUTTON_GAP
     local abilitiesHeight = rows * BUTTON_SIZE + (rows - 1) * ROW_GAP
-    -- Bottom row width: ranged button (+1) + shouts + racials.
+    -- Bottom row width: ranged button (+1) + shouts + racials + off-hand swap (+1).
     local shoutSlots = #shoutAbils + #racialAbils
-    local shoutsWidth = (shoutSlots + 1) * BUTTON_SIZE + shoutSlots * BUTTON_GAP
+    local shoutsWidth = (shoutSlots + 2) * BUTTON_SIZE + (shoutSlots + 1) * BUTTON_GAP
     local headerHeight = 24
     local totalHeight = headerHeight + SECTION_GAP + abilitiesHeight + SECTION_GAP + BUTTON_SIZE
 
@@ -589,6 +594,45 @@ function AB:Build()
         self.shoutButtons[#self.shoutButtons + 1] = btn
     end
 
+    -- Off-hand swap toggle, last on the bottom row. It joins self.shoutButtons
+    -- so Relayout, the keybind positions, and the hotkey labels treat it exactly
+    -- like a shout/racial -- but it carries NO currentAbility, so the Tick
+    -- spell-loop and RefreshLayout both skip it (its icon is driven by
+    -- AB:UpdateSwap on inventory changes instead). The macro is a single
+    -- /equipslot line; AB:RefreshSwap fills it from the saved set, out of combat.
+    do
+        local prev = self.shoutButtons[#self.shoutButtons]
+        local swap = createAbilityButton(shouts, "OffhandSwap")
+        swap:SetPoint("LEFT", prev or ranged, "RIGHT", BUTTON_GAP, 0)
+        swap:SetAttribute("type", "macro")
+        swap.stanceCorner:Hide()
+        swap:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText("Off-hand swap", 1, 1, 1)
+            local s = HelloWarriorCharDB.offhandSwap
+            if s and s.weapon and s.shield then
+                if IsEquippedItemType("Shields") then
+                    GameTooltip:AddLine("Press to swap to: " .. s.weapon.name .. " (dual-wield)", 0.6, 0.85, 1)
+                else
+                    GameTooltip:AddLine("Press to swap to: " .. s.shield.name .. " (shield)", 0.6, 0.85, 1)
+                end
+                GameTooltip:AddLine(" ")
+                GameTooltip:AddLine("Off-hand weapon: " .. s.weapon.name, 0.7, 0.7, 0.7)
+                GameTooltip:AddLine("Shield: " .. s.shield.name, 0.7, 0.7, 0.7)
+            else
+                GameTooltip:AddLine("Equip your off-hand weapon and type /hw swap,", 0.7, 0.7, 0.7)
+                GameTooltip:AddLine("then equip your shield and /hw swap again.", 0.7, 0.7, 0.7)
+                if s and s.weapon then GameTooltip:AddLine("Saved off-hand weapon: " .. s.weapon.name, 0.6, 0.8, 0.6) end
+                if s and s.shield then GameTooltip:AddLine("Saved shield: " .. s.shield.name, 0.6, 0.8, 0.6) end
+            end
+            GameTooltip:Show()
+        end)
+        self.swapButton = swap
+        self.shoutButtons[#self.shoutButtons + 1] = swap
+    end
+    self:RefreshSwap()
+    self:UpdateSwap()
+
     -- Header row: stance indicator + role toggle.
     ns.StanceIndicator:Build(container)
     ns.StanceIndicator.frame:SetPoint("TOPLEFT", container, "TOPLEFT", 0, 0)
@@ -641,6 +685,100 @@ function AB:UpdateRanged()
     btn.icon:SetTexture(tex or RANGED_EMPTY_ICON)
     btn.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)  -- SetTexture resets coords
     btn.icon:SetDesaturated(not btn.hasRanged)
+end
+
+-- ---- Off-hand swap (dual-wield <-> shield) --------------------------------
+-- One secure button toggles slot 17 between a saved off-hand weapon and a saved
+-- shield. The macro is a SINGLE /equipslot line whose target item is chosen by
+-- ONE [equipped:Shields] check, so it reads the live equipped state exactly once
+-- (no mid-macro "bounce" from re-checking after an equip) and the SAME static
+-- text toggles both directions -- meaning no in-combat SetAttribute and no
+-- addon-side state machine. Swapping only the off-hand leaves the main hand (and
+-- its swing timer) untouched. The [equipped:Shields] token is the same item
+-- subtype used by IsEquippedItemType("Shields") elsewhere and by the ranged
+-- button's [worn:...] conditionals, so it resolves on this client.
+
+-- (Re)build the secure macrotext from the saved set. Out of combat only
+-- (SetAttribute on a secure button is blocked under combat lockdown); re-runs
+-- from RefreshLayout on PLAYER_REGEN_ENABLED, so a save attempted in combat
+-- lands once the fight ends.
+function AB:RefreshSwap()
+    local btn = self.swapButton
+    if not btn then return end
+    if InCombatLockdown() then return end
+    local s = HelloWarriorCharDB.offhandSwap
+    if s and s.weapon and s.shield then
+        -- Conditional FIRST (like every other macro here), and the slot is part
+        -- of each clause's argument: shield on -> equip the weapon to 17, else
+        -- equip the shield to 17. One evaluation, one equip -> no bounce.
+        btn:SetAttribute("macrotext",
+            ("/equipslot [equipped:Shields] %d %s; %d %s"):format(
+                OFFHAND_SLOT, s.weapon.name, OFFHAND_SLOT, s.shield.name))
+    else
+        btn:SetAttribute("macrotext", "")  -- not configured yet: a no-op press
+    end
+end
+
+-- Icon/desaturation follow the live equipped state: show the item you'll swap
+-- TO (the opposite of what's on now). Purely cosmetic (no Show/Hide, no secure
+-- calls), so it's safe in combat -- and UNIT_INVENTORY_CHANGED fires right after
+-- a press, flipping the glyph to the new target.
+function AB:UpdateSwap()
+    local btn = self.swapButton
+    if not btn then return end
+    local s = HelloWarriorCharDB.offhandSwap
+    if s and s.weapon and s.shield then
+        local target = IsEquippedItemType("Shields") and s.weapon or s.shield
+        btn.icon:SetTexture(target.icon or SWAP_EMPTY_ICON)
+        btn.icon:SetDesaturated(false)
+    else
+        btn.icon:SetTexture(SWAP_EMPTY_ICON)
+        btn.icon:SetDesaturated(true)  -- dim until both ends are saved
+    end
+    btn.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)  -- SetTexture resets coords
+end
+
+-- Snapshot whatever is currently in the off-hand into the swap set, classifying
+-- it as the shield or the off-hand weapon (only slot 17 can hold a shield, so
+-- IsEquippedItemType("Shields") tells the two apart). Run it twice -- once with
+-- each item equipped -- to define both ends of the toggle. /equipslot takes an
+-- item NAME (parsed from the link); the texture is cached for the button glyph.
+function AB:SaveOffhandSwap()
+    local link = GetInventoryItemLink("player", OFFHAND_SLOT)
+    if not link then
+        print("|cffc79c6eHelloWarrior|r equip your off-hand weapon or shield first, then /hw swap.")
+        return
+    end
+    local name = link:match("%[(.-)%]")
+    if not name or name == "" then
+        print("|cffc79c6eHelloWarrior|r couldn't read the off-hand item name; try /hw swap again.")
+        return
+    end
+    local icon = GetInventoryItemTexture("player", OFFHAND_SLOT)
+    HelloWarriorCharDB.offhandSwap = HelloWarriorCharDB.offhandSwap or {}
+    local s = HelloWarriorCharDB.offhandSwap
+    if IsEquippedItemType("Shields") then
+        s.shield = { name = name, icon = icon }
+        print(("|cffc79c6eHelloWarrior|r saved shield: %s"):format(name))
+    else
+        s.weapon = { name = name, icon = icon }
+        print(("|cffc79c6eHelloWarrior|r saved off-hand weapon: %s"):format(name))
+    end
+    if s.weapon and s.shield then
+        print(("|cffc79c6eHelloWarrior|r off-hand swap ready: %s <-> %s."):format(s.weapon.name, s.shield.name))
+    else
+        print(("|cffc79c6eHelloWarrior|r now equip your %s and /hw swap again."):format(
+            s.shield and "off-hand weapon" or "shield"))
+    end
+    self:RefreshSwap()
+    self:UpdateSwap()
+end
+
+function AB:ClearOffhandSwap()
+    HelloWarriorCharDB.offhandSwap = nil
+    self:RefreshSwap()
+    self:UpdateSwap()
+    print("|cffc79c6eHelloWarrior|r off-hand swap cleared.")
 end
 
 function AB:SetHWBarsVisible(visible)
@@ -1107,6 +1245,7 @@ function AB:RefreshLayout()
         end
     end
     self.bar:Execute([[ self:RunAttribute("UpdateRole") ]])
+    self:RefreshSwap()  -- (re)apply the off-hand swap macro out of combat
     self:Relayout()
 end
 
@@ -1116,9 +1255,9 @@ ns:On("PLAYER_LOGIN", function()
 end)
 ns:On("SPELLS_CHANGED",      function() AB:ResolveMeleeRef(); AB:RefreshLayout() end)
 ns:On("PLAYER_REGEN_ENABLED", function() AB:RefreshLayout() end)
-ns:On("PLAYER_ENTERING_WORLD",       function() AB:UpdateRanged() end)
+ns:On("PLAYER_ENTERING_WORLD",       function() AB:UpdateRanged(); AB:UpdateSwap() end)
 ns:On("UNIT_INVENTORY_CHANGED", function(unit)
-    if unit == "player" then AB:UpdateRanged() end
+    if unit == "player" then AB:UpdateRanged(); AB:UpdateSwap() end
 end)
 ns:On("UPDATE_SHAPESHIFT_FORM", function()
     maybePressFlash()

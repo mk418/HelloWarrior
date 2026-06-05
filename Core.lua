@@ -118,11 +118,16 @@ SlashCmdList["HELLOWARRIOR"] = function(msg)
         if arg == "clear" then ns.Keybinds:ClearAll()
         elseif arg == "reset" then ns.Keybinds:ResetDefaults()
         else ns.Keybinds:ToggleMode() end
+    elseif cmd == "swap" then
+        if not ns.enabled then return end
+        if arg == "clear" then ns.ActionBar:ClearOffhandSwap()
+        else ns.ActionBar:SaveOffhandSwap() end
     else
         print("|cffc79c6eHelloWarrior|r commands:")
         print("  /hw config || /hw reset")
         print("  /hw bars [on||off]  (HelloWarrior bars)")
         print("  /hw pos [lock||unlock||reset]")
         print("  /hw keys [clear||reset] (edit keybindings)")
+        print("  /hw swap [clear] (save off-hand weapon/shield toggle)")
     end
 end

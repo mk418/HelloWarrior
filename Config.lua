@@ -63,6 +63,18 @@ function Config:CreatePanel()
     resetBtn:SetText("Reset position")
     resetBtn:SetScript("OnClick", function() ns.ActionBar:ResetPosition() end)
 
+    -- Off-hand swap capture: click once with your off-hand weapon equipped, once
+    -- with your shield equipped, to define both ends of the bottom-row toggle.
+    local swapBtn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+    swapBtn:SetSize(180, 22)
+    swapBtn:SetPoint("TOPLEFT", resetBtn, "BOTTOMLEFT", 0, -8)
+    swapBtn:SetText("Save current off-hand")
+    swapBtn:SetScript("OnClick", function() ns.ActionBar:SaveOffhandSwap() end)
+
+    local swapHint = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    swapHint:SetPoint("LEFT", swapBtn, "RIGHT", 8, 0)
+    swapHint:SetText("Capture your off-hand weapon, then your shield.")
+
     local function sync()
         hwBarsCB:SetChecked(HelloWarriorCharDB.showHWBars ~= false)
         lockCB:SetChecked(HelloWarriorCharDB.locked ~= false)
@@ -72,7 +84,7 @@ function Config:CreatePanel()
     panel:SetScript("OnShow", sync)
 
     local help = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    help:SetPoint("TOPLEFT", resetBtn, "BOTTOMLEFT", 0, -16)
+    help:SetPoint("TOPLEFT", swapBtn, "BOTTOMLEFT", 0, -16)
     help:SetJustifyH("LEFT")
     help:SetText(
         "Slash commands:\n" ..
@@ -81,6 +93,7 @@ function Config:CreatePanel()
         "  /hw pos [lock||unlock||reset] - lock / move the cluster\n" ..
         "  /hw keys - edit keybindings (hover a button, press a key)\n" ..
         "  /hw keys clear||reset - clear or restore default keybindings\n" ..
+        "  /hw swap [clear] - save the off-hand weapon/shield toggle\n" ..
         "  /hw reset - reset all saved variables and reload"
     )
 

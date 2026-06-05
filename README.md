@@ -12,6 +12,7 @@ A lean, opinionated ability manager for WoW Classic Era Warriors. It lays out yo
 - **Strips wasted buffs.** Using an ability drops caster blessings (and Salvation, for tanks) that are wasted on a Rage class.
 - **Combat readouts.** A main-hand **swing timer**, a **rage bar**, and an in/out-of-**melee range** indicator, plus GCD and cooldown sweeps, an out-of-range tint, a queued-on-next-swing glow for Heroic Strike / Cleave, and a Battle Shout refresh reminder.
 - **Racial + ranged button.** Your race's active racial (Stoneform, Blood Fury, War Stomp, …) and a weapon-adaptive ranged-pull button sit on the shouts row.
+- **In-combat shield swap.** One button flips your off-hand between your weapon and a shield — shield up for a dangerous moment, then back to dual-wield, mid-fight. It only touches the off-hand, so your main-hand swing timer keeps ticking.
 - **Your keybinds.** Bind keys to on-screen slots with a hover-and-press editor; the binding follows the visible button as the layout collapses.
 
 ## Usage
@@ -20,6 +21,7 @@ A lean, opinionated ability manager for WoW Classic Era Warriors. It lays out yo
 - `/hw bars [on|off]` — show or hide the addon bars.
 - `/hw pos [lock|unlock|reset]` — lock, move, or recenter the cluster (locked by default; unlock to drag).
 - `/hw keys` — enter keybind mode (hover a button, press a key); `/hw keys clear|reset` manage them.
+- `/hw swap` — save the off-hand swap toggle: run it with your off-hand weapon equipped, then again with your shield equipped (`/hw swap clear` forgets it). The button then flips between the two; bind it like any other slot.
 
 ## Caveats
 
