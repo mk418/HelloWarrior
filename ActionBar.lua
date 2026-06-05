@@ -9,6 +9,15 @@ local ABILITIES_PER_ROW = 8
 local ROW_GAP = 4
 local SECTION_GAP = 10
 
+-- Ranged-attack button. One macro fires whichever ranged weapon is equipped
+-- via [worn:...] conditionals, so only the matching ability is cast. "!" keeps
+-- the auto-repeat Shoot abilities firing instead of toggling off; Throw is a
+-- single cast so it gets no "!". Works in every stance; no /startattack (that
+-- starts melee auto-attack, the opposite of a ranged pull).
+local RANGED_SLOT = 18  -- INVSLOT_RANGED
+local RANGED_MACRO = "/cast [worn:Guns] !Shoot Gun; [worn:Bows] !Shoot Bow; [worn:Crossbows] !Shoot Crossbow; [worn:Thrown] Throw"
+local RANGED_EMPTY_ICON = "Interface\\Icons\\Ability_Marksmanship"
+
 -- ---------- helpers --------------------------------------------------------
 
 local function stanceIdList(stance)
@@ -45,10 +54,38 @@ local function stanceMatches(stance)
     return false
 end
 
-local function buildMacro(ability)
+-- DPS "hold Ctrl to switch to Berserker" applies to abilities usable in
+-- Berserker that the macro doesn't already force there: "any"-stance abilities,
+-- and multi-stance abilities that include Berserker. Berserker-only abilities
+-- already dance there; battle/defensive-only ones can't be used in Berserker,
+-- so Ctrl must not yank you out of the stance they need.
+local function isBerserkerSwitchable(ability)
+    local s = ability.stance
+    if s == nil or s == "any" then return true end
+    if type(s) == "table" then
+        local hasBerserker, hasOther = false, false
+        for _, v in ipairs(s) do
+            if v == "berserker" then hasBerserker = true else hasOther = true end
+        end
+        return hasBerserker and hasOther
+    end
+    return false
+end
+
+local CTRL_BERSERKER_SWITCH = ("/cast [mod:ctrl,nostance:%d] %s"):format(
+    ns.Abilities.STANCE_ID.berserker,
+    ns.Abilities.STANCE_SPELL[ns.Abilities.STANCE_ID.berserker])
+
+local function buildMacro(ability, role)
     local lines = { "#showtooltip " .. ability.name }
     if ability.combo then
         table.insert(lines, ("/use [mod:%s] %s"):format(ability.combo.modifier, ability.combo.use))
+    end
+    -- DPS: hold Ctrl to dance into Berserker first. The player holds it only
+    -- when rage is low enough that the switch is free -- the secure button
+    -- can't read rage itself, so that judgement stays with them.
+    if role == "dps" and isBerserkerSwitchable(ability) then
+        table.insert(lines, CTRL_BERSERKER_SWITCH)
     end
     if not ability.stance or ability.stance == "any" then
         table.insert(lines, "/cast " .. ability.name)
@@ -138,10 +175,25 @@ local function createAbilityButton(parent, name)
     icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
     btn.icon = icon
 
+    -- Ornate frame border: its own always-on texture so it stays put during a
+    -- press (a managed Normal->Pushed frame swap read as too strong).
     local border = btn:CreateTexture(nil, "ARTWORK")
     border:SetTexture("Interface\\Buttons\\UI-Quickslot2")
     border:SetSize(BUTTON_SIZE * 1.7, BUTTON_SIZE * 1.7)
     border:SetPoint("CENTER", btn, "CENTER", 0, -1)
+
+    -- Subtle click feedback, like the default action bars: a faint darken over
+    -- the icon while the button is held (the button's Pushed state). The border
+    -- is a separate texture above this, so it stays put. The darken sits over
+    -- the 1x icon only, so it never collides with the 1.7x border ring.
+    local pushed = btn:CreateTexture(nil, "ARTWORK")
+    pushed:SetColorTexture(0, 0, 0, 0.25)
+    pushed:SetAllPoints(icon)
+    btn:SetPushedTexture(pushed)
+
+    -- Mouseover highlight over the icon (ADD wash; doesn't hide the art).
+    btn:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
+    btn:GetHighlightTexture():SetAllPoints(icon)
 
     local cd = CreateFrame("Cooldown", nil, btn, "CooldownFrameTemplate")
     cd:SetAllPoints(icon)
@@ -175,7 +227,9 @@ local function createAbilityButton(parent, name)
         if not self.pulseStart then return end
         local t = GetTime() - self.pulseStart
         if t >= 0.6 then
-            self:SetScript("OnUpdate", nil)
+            -- Keep the OnUpdate installed (it idles via the pulseStart guard
+            -- above). Removing it here meant a button's SECOND stance-press
+            -- flash had no handler to fade it, so the ring stuck on screen.
             self.pulseStart = nil
             self:Hide()
             return
@@ -231,11 +285,11 @@ function AB:UpdatePosition()
     end
 end
 
-local function setSlotMacro(btn, ability)
+local function setSlotMacro(btn, ability, role)
     if not ability or isHidden(ability) then
         return ""
     end
-    return buildMacro(ability)
+    return buildMacro(ability, role)
 end
 
 -- Reversibly toggle Blizzard's default action bars. We use alpha + mouse
@@ -321,7 +375,8 @@ function AB:Build()
     local rows = math.ceil(maxAbil / ABILITIES_PER_ROW)
     local rowWidth = ABILITIES_PER_ROW * BUTTON_SIZE + (ABILITIES_PER_ROW - 1) * BUTTON_GAP
     local abilitiesHeight = rows * BUTTON_SIZE + (rows - 1) * ROW_GAP
-    local shoutsWidth = #shoutAbils * BUTTON_SIZE + (#shoutAbils - 1) * BUTTON_GAP
+    -- +1 column for the prepended ranged-attack button.
+    local shoutsWidth = (#shoutAbils + 1) * BUTTON_SIZE + #shoutAbils * BUTTON_GAP
     local headerHeight = 24
     local totalHeight = headerHeight + SECTION_GAP + abilitiesHeight + SECTION_GAP + BUTTON_SIZE
 
@@ -358,8 +413,8 @@ function AB:Build()
         local dpsAb  = dpsAbils[i]
         btn.tankAbility = tankAb
         btn.dpsAbility  = dpsAb
-        btn:SetAttribute("macrotext-tank", setSlotMacro(btn, tankAb))
-        btn:SetAttribute("macrotext-dps",  setSlotMacro(btn, dpsAb))
+        btn:SetAttribute("macrotext-tank", setSlotMacro(btn, tankAb, "tank"))
+        btn:SetAttribute("macrotext-dps",  setSlotMacro(btn, dpsAb, "dps"))
         btn:SetAttribute("type", "macro")
 
         bar:SetFrameRef("btn" .. i, btn)
@@ -402,16 +457,40 @@ function AB:Build()
     end)
     RegisterStateDriver(bar, "mod", "[mod:alt] on; off")
 
-    -- Shouts bar (no role swap; all 5 share both roles).
+    -- Shouts bar (no role swap; all share both roles). The ranged-attack
+    -- button is prepended as the leftmost slot -- it's role-agnostic too.
     local shouts = CreateFrame("Frame", "HelloWarrior_ShoutsBar", container)
     shouts:SetSize(shoutsWidth, BUTTON_SIZE)
     shouts:SetPoint("TOP", container, "TOP", 0, -(headerHeight + SECTION_GAP))
     self.shoutsBar = shouts
+
+    -- Ranged attack: one button that fires whatever ranged weapon is equipped.
+    -- The macro is static (worn-conditionals pick the ability), so it never
+    -- needs a combat-time update; only the icon/tooltip track the weapon.
+    local ranged = createAbilityButton(shouts, "Ranged")
+    ranged:RegisterForClicks("AnyUp")  -- single fire (Throw must not double-cast)
+    ranged:SetPoint("LEFT", shouts, "LEFT", 0, 0)
+    ranged:SetAttribute("type", "macro")
+    ranged:SetAttribute("macrotext", RANGED_MACRO)
+    ranged.stanceCorner:Hide()
+    ranged:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        if self.hasRanged then
+            GameTooltip:SetInventoryItem("player", RANGED_SLOT)
+        else
+            GameTooltip:SetText("Ranged Attack", 1, 1, 1)
+            GameTooltip:AddLine("Equip a gun, bow, crossbow, or thrown weapon.", 0.7, 0.7, 0.7)
+        end
+        GameTooltip:Show()
+    end)
+    self.rangedButton = ranged
+    self:UpdateRanged()
+
     self.shoutButtons = {}
     for i, ab in ipairs(shoutAbils) do
         local btn = createAbilityButton(shouts, "Shout" .. i)
         if i == 1 then
-            btn:SetPoint("LEFT", shouts, "LEFT", 0, 0)
+            btn:SetPoint("LEFT", ranged, "RIGHT", BUTTON_GAP, 0)
         else
             btn:SetPoint("LEFT", self.shoutButtons[i - 1], "RIGHT", BUTTON_GAP, 0)
         end
@@ -444,6 +523,20 @@ function AB:Build()
 
     -- Periodic tick for flash/rage/cooldown.
     self.ticker = C_Timer.NewTicker(0.1, function() AB:Tick() end)
+end
+
+-- Track the equipped ranged weapon: icon + tooltip follow it, and the button
+-- desaturates to a generic glyph when nothing ranged is equipped. Purely
+-- cosmetic (no Show/Hide), so it's safe to run in combat; the macro itself is
+-- static and fires the right ability via its worn-conditionals.
+function AB:UpdateRanged()
+    local btn = self.rangedButton
+    if not btn then return end
+    local tex = GetInventoryItemTexture("player", RANGED_SLOT)
+    btn.hasRanged = tex ~= nil
+    btn.icon:SetTexture(tex or RANGED_EMPTY_ICON)
+    btn.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)  -- SetTexture resets coords
+    btn.icon:SetDesaturated(not btn.hasRanged)
 end
 
 function AB:ApplyBlizzardBars()
@@ -719,8 +812,8 @@ function AB:RefreshLayout()
     if not self.buttons then return end
     if InCombatLockdown() then return end
     for i, btn in ipairs(self.buttons) do
-        btn:SetAttribute("macrotext-tank", setSlotMacro(btn, btn.tankAbility))
-        btn:SetAttribute("macrotext-dps",  setSlotMacro(btn, btn.dpsAbility))
+        btn:SetAttribute("macrotext-tank", setSlotMacro(btn, btn.tankAbility, "tank"))
+        btn:SetAttribute("macrotext-dps",  setSlotMacro(btn, btn.dpsAbility, "dps"))
     end
     for _, btn in ipairs(self.shoutButtons or {}) do
         if btn.currentAbility then
@@ -741,7 +834,10 @@ ns:On("PLAYER_LOGIN", function()
 end)
 ns:On("SPELLS_CHANGED",      function() AB:RefreshLayout() end)
 ns:On("PLAYER_REGEN_ENABLED", function() AB:RefreshLayout(); AB:ApplyBlizzardBars() end)
-ns:On("PLAYER_ENTERING_WORLD",       function() AB:ApplyBlizzardBars() end)
+ns:On("PLAYER_ENTERING_WORLD",       function() AB:ApplyBlizzardBars(); AB:UpdateRanged() end)
+ns:On("UNIT_INVENTORY_CHANGED", function(unit)
+    if unit == "player" then AB:UpdateRanged() end
+end)
 ns:On("UPDATE_SHAPESHIFT_FORM", function()
     maybePressFlash()
     AB:Tick()

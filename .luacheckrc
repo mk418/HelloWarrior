@@ -46,6 +46,8 @@ read_globals = {
     "ActionButton_ShowOverlayGlow",
     "ActionButton_HideOverlayGlow",
     "ActionButton_OverlayGlowAnimOutFinished",
+    -- Inventory
+    "GetInventoryItemTexture",
     -- Spell / ability info
     "GetSpellInfo",
     "GetSpellCooldown",
