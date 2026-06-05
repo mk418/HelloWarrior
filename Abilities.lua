@@ -44,7 +44,7 @@ A.WORLD_BUFFS = {
 
 A.shouts = {
     { name = "Battle Shout",       stance = "any", noStartAttack = true,
-      flash = { type = "nobuff", buff = "Battle Shout" } },
+      flash = { type = "nobuff", buff = "Battle Shout", refresh = 10 } },
     { name = "Demoralizing Shout", stance = "any", noStartAttack = true },
     { name = "Challenging Shout",  stance = "any", noStartAttack = true,
       combo = { modifier = "shift", use = "Limited Invulnerability Potion" } },

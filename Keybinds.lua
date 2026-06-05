@@ -119,10 +119,15 @@ function KB:Apply()
     local AB = ns.ActionBar
     if not AB or not AB.buttons then return end
     if InCombatLockdown() then return end  -- re-runs from Relayout on regen
-    local kb = HelloWarriorCharDB.keybinds
-    if not kb then return end
 
     ClearOverrideBindings(owner)
+    -- Bars hidden -> no keybind overrides either: clear them (above) and don't
+    -- re-apply, so the keys fall back to their normal action while the bars are
+    -- off. AB:SetHWBarsVisible calls Apply when toggling.
+    if HelloWarriorCharDB.showHWBars == false then return end
+
+    local kb = HelloWarriorCharDB.keybinds
+    if not kb then return end
 
     local function bind(list, ordered)
         for pos, key in pairs(list) do
@@ -253,6 +258,10 @@ function KB:EnterMode()
     if not ns.enabled then return end
     local AB = ns.ActionBar
     if not AB or not AB.buttons then return end
+    if HelloWarriorCharDB.showHWBars == false then
+        print("|cffc79c6eHelloWarrior|r turn the bars on first (/hw bars on) to edit keybindings.")
+        return
+    end
     if InCombatLockdown() then
         print("|cffc79c6eHelloWarrior|r can't edit keybindings in combat.")
         return

@@ -3,7 +3,7 @@ local ADDON_NAME, ns = ...
 ns.SwingTimer = {}
 local ST = ns.SwingTimer
 
-local BAR_HEIGHT = 12  -- keep in sync with ActionBar.lua SWING_BAR_HEIGHT
+local BAR_HEIGHT = 12  -- header bar thickness (sits between stance + role buttons)
 
 -- Main-hand melee swing timer. The bar fills empty->full over the current
 -- main-hand swing speed; full == your next auto-attack lands (when to weave a
@@ -11,16 +11,21 @@ local BAR_HEIGHT = 12  -- keep in sync with ActionBar.lua SWING_BAR_HEIGHT
 -- Heroic Strike, Cleave and Slam all interact with the main-hand swing only;
 -- off-hand swings (read via the combat-log isOffHand flag) are filtered out.
 
--- Build the bar under the ability grid. `gap` is ActionBar's SECTION_GAP.
-function ST:Build(container, rowWidth, gap)
+-- Build the bar in the header row, filling the space between the stance buttons
+-- (left) and the role-toggle button (right). `gap` is the horizontal padding
+-- from each.
+function ST:Build(container, gap)
     if self.bar then return end
 
     local bar = CreateFrame("StatusBar", "HelloWarrior_SwingTimer", container)
-    bar:SetSize(rowWidth, BAR_HEIGHT)
-    -- AB.bar (the ability grid) is TOP-anchored, rowWidth-wide and centred, so
-    -- anchoring to its bottom centres the swing bar under the grid. We never
-    -- re-anchor in combat, so referencing the secure AB.bar here is taint-free.
-    bar:SetPoint("TOP", ns.ActionBar.bar, "BOTTOM", 0, -gap)
+    bar:SetHeight(BAR_HEIGHT)
+    -- StanceIndicator and RoleToggle are built before SwingTimer in AB:Build, so
+    -- their frames exist. Anchoring LEFT to the stance row and RIGHT to the role
+    -- toggle makes the bar's width track the gap between them. The -6 Y offset
+    -- puts it in the BOTTOM half of the header band; the rage bar takes the top
+    -- half (+6), so the two 12px bars stack to fill the 24px header.
+    bar:SetPoint("LEFT", ns.StanceIndicator.frame, "RIGHT", gap, -6)
+    bar:SetPoint("RIGHT", ns.RoleToggle.frame, "LEFT", -gap, -6)
     bar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
     bar:SetStatusBarColor(0.85, 0.70, 0.30)  -- warrior gold
     bar:SetMinMaxValues(0, 1)

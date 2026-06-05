@@ -42,6 +42,7 @@ read_globals = {
     "print",
     "C_Timer",
     "C_Spell",
+    "C_UnitAuras",
     "Enum",
     -- Keybindings (secure CLICK override bindings) + key state
     "SetOverrideBindingClick",
@@ -67,6 +68,7 @@ read_globals = {
     "GetSpellPowerCost",
     "IsUsableSpell",
     "IsCurrentSpell",
+    "IsSpellInRange",
     -- Stances
     "GetShapeshiftForm",
     -- Talents
@@ -77,7 +79,9 @@ read_globals = {
     "UnitClass",
     "UnitRace",
     "UnitAttackSpeed",
+    "UnitCanAttack",
     "UnitPower",
+    "UnitPowerMax",
     "UnitExists",
     "UnitIsDead",
     "UnitHealth",

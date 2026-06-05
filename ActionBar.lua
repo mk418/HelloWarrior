@@ -8,7 +8,8 @@ local BUTTON_GAP = 4
 local ABILITIES_PER_ROW = 7
 local ROW_GAP = 4
 local SECTION_GAP = 10
-local SWING_BAR_HEIGHT = 12  -- keep in sync with SwingTimer.lua BAR_HEIGHT
+local RAGE_POWER_TYPE = Enum and Enum.PowerType and Enum.PowerType.Rage or 1
+local HEADER_BAR_HEIGHT = 12  -- rage + swing timer stack in the header band
 
 -- Ranged-attack button. One macro fires whichever ranged weapon is equipped
 -- via [worn:...] conditionals, so only the matching ability is cast. "!" keeps
@@ -341,26 +342,43 @@ end
 
 -- ---------- main module ----------------------------------------------------
 
-local function positionKey()
-    return HelloWarriorCharDB.hideBlizzardBars and "barPositionBottom" or "barPosition"
-end
-
 local function savePosition(frame)
     local point, _, relPoint, x, y = frame:GetPoint()
-    HelloWarriorCharDB[positionKey()] = { point = point, relPoint = relPoint, x = x, y = y }
+    HelloWarriorCharDB.barPosition = { point = point, relPoint = relPoint, x = x, y = y }
 end
 
 function AB:UpdatePosition()
     if not self.container then return end
-    local pos = HelloWarriorCharDB[positionKey()]
+    local pos = HelloWarriorCharDB.barPosition
     self.container:ClearAllPoints()
     if pos then
         self.container:SetPoint(pos.point, UIParent, pos.relPoint, pos.x, pos.y)
-    elseif HelloWarriorCharDB.hideBlizzardBars then
-        self.container:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, 40)
     else
-        self.container:SetPoint("CENTER", UIParent, "CENTER", 0, -180)
+        self.container:SetPoint("CENTER", UIParent, "CENTER", 0, -160)
     end
+end
+
+-- Lock/unlock dragging the whole cluster. Locked == mouse disabled on the
+-- container (the drag handle), so clicks pass through and it can't be moved; the
+-- move-mode backdrop shows only while unlocked so the transparent cluster is
+-- visible and grabbable. EnableMouse + texture toggles aren't combat-protected.
+function AB:SetLocked(locked)
+    HelloWarriorCharDB.locked = locked and true or false
+    if not self.container then return end
+    self.container:EnableMouse(not HelloWarriorCharDB.locked)
+    if self.moveBg then
+        if HelloWarriorCharDB.locked then self.moveBg:Hide() else self.moveBg:Show() end
+    end
+end
+
+-- Drop the saved position so UpdatePosition falls back to the default spot.
+function AB:ResetPosition()
+    if InCombatLockdown() then
+        print("|cffc79c6eHelloWarrior|r can't move the bars in combat.")
+        return
+    end
+    HelloWarriorCharDB.barPosition = nil
+    self:UpdatePosition()
 end
 
 local function setSlotMacro(btn, ability, role)
@@ -368,56 +386,6 @@ local function setSlotMacro(btn, ability, role)
         return ""
     end
     return buildMacro(ability, role)
-end
-
--- Reversibly toggle Blizzard's default action bars. We use alpha + mouse
--- rather than :Hide so the secure keybindings keep firing and toggling
--- back to visible is straightforward.
-local BLIZZ_ART = {
-    "MainMenuBarArtFrame",
-    "MainMenuBarLeftEndCap",
-    "MainMenuBarRightEndCap",
-    "ActionBarUpButton",
-    "ActionBarDownButton",
-    "MainMenuBarPageNumber",
-}
-
-local function setBlizzardBarsVisible(visible)
-    if InCombatLockdown() then return false end
-    for i = 1, 12 do
-        for _, prefix in ipairs({ "ActionButton", "MultiBarBottomLeftButton", "MultiBarBottomRightButton" }) do
-            local b = _G[prefix .. i]
-            if b then
-                b:SetAlpha(visible and 1 or 0)
-                b:EnableMouse(visible)
-            end
-        end
-    end
-    -- Stance bar parents (name varies by patch and UI replacement addon).
-    for _, name in ipairs({
-        "StanceBarFrame", "StanceBar", "ShapeshiftBarFrame", "PossessBarFrame",
-        "DragonflightUIStancebar",
-    }) do
-        local f = _G[name]
-        if f then
-            if visible then f:Show() else f:Hide() end
-        end
-    end
-    -- Individual stance buttons (belt & suspenders if a UI re-shows the bar).
-    for i = 1, 10 do
-        for _, prefix in ipairs({ "StanceButton", "ShapeshiftButton" }) do
-            local b = _G[prefix .. i]
-            if b then
-                b:SetAlpha(visible and 1 or 0)
-                b:EnableMouse(visible)
-            end
-        end
-    end
-    for _, name in ipairs(BLIZZ_ART) do
-        local f = _G[name]
-        if f then if visible then f:Show() else f:Hide() end end
-    end
-    return true
 end
 
 local function applyAbilityToButton(btn, ability)
@@ -468,7 +436,6 @@ function AB:Build()
     local shoutsWidth = (shoutSlots + 1) * BUTTON_SIZE + shoutSlots * BUTTON_GAP
     local headerHeight = 24
     local totalHeight = headerHeight + SECTION_GAP + abilitiesHeight + SECTION_GAP + BUTTON_SIZE
-        + SECTION_GAP + SWING_BAR_HEIGHT
 
     -- Container (drag handle for the whole cluster). Width is the wider of the
     -- ability grid and the bottom row -- a long shouts+racials row (e.g. Undead)
@@ -476,13 +443,28 @@ function AB:Build()
     local container = CreateFrame("Frame", "HelloWarrior_Container", UIParent)
     container:SetSize(math.max(rowWidth, shoutsWidth), totalHeight)
     container:SetMovable(true)
-    container:EnableMouse(true)
+    container:EnableMouse(not HelloWarriorCharDB.locked)  -- locked => not draggable
     container:RegisterForDrag("LeftButton")
-    container:SetScript("OnDragStart", function(self) self:StartMoving() end)
+    container:SetScript("OnDragStart", function(self)
+        if not HelloWarriorCharDB.locked then self:StartMoving() end
+    end)
     container:SetScript("OnDragStop", function(self) self:StopMovingOrSizing(); savePosition(self) end)
+    -- Faint "move mode" backdrop, shown only while unlocked so the otherwise
+    -- transparent cluster is visible and grabbable; drawn behind the buttons.
+    local moveBg = container:CreateTexture(nil, "BACKGROUND")
+    moveBg:SetAllPoints()
+    moveBg:SetColorTexture(0.2, 0.6, 1.0, 0.15)
+    if HelloWarriorCharDB.locked then moveBg:Hide() end
+    self.moveBg = moveBg
     self.container = container
     self:UpdatePosition()
     if HelloWarriorCharDB.showHWBars == false then container:Hide() end
+
+    -- Melee-range readout: a coloured word centred just above the cluster.
+    -- Parented to the container so it drags with it; updated in AB:Tick.
+    local rangeText = container:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    rangeText:SetPoint("BOTTOM", container, "TOP", 0, SECTION_GAP)
+    self.rangeText = rangeText
 
     -- Abilities bar (secure handler for role swap).
     local bar = CreateFrame("Frame", "HelloWarrior_AbilityBar", container, "SecureHandlerStateTemplate")
@@ -614,18 +596,34 @@ function AB:Build()
     ns.RoleToggle:Build(container, bar)
     ns.RoleToggle.frame:SetPoint("TOPRIGHT", container, "TOPRIGHT", 0, -1)
 
-    -- Swing timer, a full-width bar under the ability grid (anchored to AB.bar).
-    ns.SwingTimer:Build(container, rowWidth, SECTION_GAP)
+    -- Swing timer, in the header row between the stance buttons and role toggle.
+    ns.SwingTimer:Build(container, SECTION_GAP)
+
+    -- Rage bar: shares the header band with the swing timer (between the stance
+    -- buttons and the role toggle). Rage takes the TOP half (always shown), the
+    -- swing timer the bottom half (combat only); each 12px fills the 24px header.
+    -- StanceIndicator/RoleToggle are built just above, so their frames exist.
+    -- Updated each tick (UNIT_POWER_UPDATE drives Tick too, so it tracks live).
+    local rageBar = CreateFrame("StatusBar", "HelloWarrior_RageBar", container)
+    rageBar:SetHeight(HEADER_BAR_HEIGHT)
+    rageBar:SetPoint("LEFT", ns.StanceIndicator.frame, "RIGHT", SECTION_GAP, 6)
+    rageBar:SetPoint("RIGHT", ns.RoleToggle.frame, "LEFT", -SECTION_GAP, 6)
+    rageBar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
+    rageBar:SetStatusBarColor(0.78, 0.25, 0.25)  -- rage red
+    rageBar:SetMinMaxValues(0, 100)
+    local rageBg = rageBar:CreateTexture(nil, "BACKGROUND")
+    rageBg:SetAllPoints()
+    rageBg:SetColorTexture(0, 0, 0, 0.55)
+    local rageLabel = rageBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    rageLabel:SetPoint("CENTER")
+    self.rageBar = rageBar
+    self.rageLabel = rageLabel
 
     -- Push the initial role through the snippet (out of combat).
     bar:Execute([[ self:RunAttribute("UpdateRole") ]])
     AB:OnRoleApplied(bar:GetAttribute("effectiveRole") or HelloWarriorCharDB.role or "dps")
 
-    self:ApplyBlizzardBars()
-    -- Re-apply after a beat to catch UI replacement addons that set up
-    -- their bars later in the load cycle.
-    C_Timer.After(0.5, function() if AB.container then AB:ApplyBlizzardBars() end end)
-    C_Timer.After(2.0, function() if AB.container then AB:ApplyBlizzardBars() end end)
+    self:ResolveMeleeRef()  -- pick the melee-range reference spell for the indicator
 
     -- Periodic tick for flash/rage/cooldown.
     self.ticker = C_Timer.NewTicker(0.1, function() AB:Tick() end)
@@ -645,20 +643,6 @@ function AB:UpdateRanged()
     btn.icon:SetDesaturated(not btn.hasRanged)
 end
 
-function AB:ApplyBlizzardBars()
-    setBlizzardBarsVisible(not HelloWarriorCharDB.hideBlizzardBars)
-end
-
-function AB:SetBlizzardBarsHidden(hide)
-    if InCombatLockdown() then
-        print("|cffc79c6eHelloWarrior|r can't toggle bars in combat.")
-        return
-    end
-    HelloWarriorCharDB.hideBlizzardBars = hide and true or false
-    self:ApplyBlizzardBars()
-    self:UpdatePosition()
-end
-
 function AB:SetHWBarsVisible(visible)
     if InCombatLockdown() then
         print("|cffc79c6eHelloWarrior|r can't toggle bars in combat.")
@@ -667,6 +651,9 @@ function AB:SetHWBarsVisible(visible)
     HelloWarriorCharDB.showHWBars = visible and true or false
     if not self.container then return end
     if visible then self.container:Show() else self.container:Hide() end
+    -- Sync the keybind overrides to the new visibility: off clears them (keys
+    -- fall back to their normal action), on re-applies them.
+    if ns.Keybinds then ns.Keybinds:Apply() end
 end
 
 function AB:CurrentAbility(slotBtn)
@@ -798,14 +785,32 @@ local function updateCooldown(btn, spellName)
     end
 end
 
+-- Resolve once: bare global on 1.15.x, C_Spell on newer-API clients (the latter
+-- returns a boolean, normalized below). Mirrors the isCurrentSpell pattern.
+local IsSpellInRange = IsSpellInRange or (C_Spell and C_Spell.IsSpellInRange)
+
+-- 0 = out of range, 1 = in range, nil = no range check applies (no/invalid or
+-- friendly/dead target, self-buff/shout, unknown spell). nil must NEVER read as
+-- out of range, so callers key strictly off `== 0`. Works the same everywhere,
+-- including dungeons and raids -- it's a pure target-range check, not zone-gated.
+local function spellRange(spellName)
+    if not IsSpellInRange then return nil end
+    if not UnitExists("target") or not UnitCanAttack("player", "target") then return nil end
+    local r = IsSpellInRange(spellName, "target")
+    if r == true then return 1 elseif r == false then return 0 end
+    return r
+end
+
 local function updateRageTint(btn, spellName)
     local usable, noPower = IsUsableSpell(spellName)
     if not usable and noPower then
-        btn.icon:SetVertexColor(0.6, 0.6, 0.9)
+        btn.icon:SetVertexColor(0.6, 0.6, 0.9)        -- rage-starved (blue)
     elseif not usable then
-        btn.icon:SetVertexColor(0.4, 0.4, 0.4)
+        btn.icon:SetVertexColor(0.4, 0.4, 0.4)        -- unusable / wrong stance (grey)
+    elseif spellRange(spellName) == 0 then
+        btn.icon:SetVertexColor(0.9, 0.35, 0.35)      -- castable but OUT OF RANGE (red)
     else
-        btn.icon:SetVertexColor(1, 1, 1)
+        btn.icon:SetVertexColor(1, 1, 1)              -- usable & in range / range N/A (white)
     end
 end
 
@@ -993,6 +998,68 @@ function AB:Tick()
             applyFlash(btn, {})
         end
     end
+
+    self:UpdateRangeIndicator()
+    self:UpdateRageBar()
+end
+
+-- Melee reference for the range readout, first-known-wins. These are normal
+-- TARGETED melee abilities whose GetSpellInfo reports a real ~5yd range, so
+-- IsSpellInRange returns a usable 1/0 (the per-button red tint already proves
+-- this works for them). Heroic Strike / Cleave are NOT here: they're on-next-
+-- swing and IsSpellInRange returns nil for them -- gating on Heroic Strike was
+-- the original blank-indicator bug. Sunder Armor leads: it's any-stance, so its
+-- range check is reliable regardless of the stance you're in.
+local MELEE_REF_CANDIDATES = { "Sunder Armor", "Rend", "Hamstring", "Mortal Strike", "Pummel" }
+
+function AB:ResolveMeleeRef()
+    self.meleeRefSpell = nil
+    for _, name in ipairs(MELEE_REF_CANDIDATES) do
+        if GetSpellInfo(name) then  -- non-nil == learned by this character
+            self.meleeRefSpell = name
+            return
+        end
+    end
+end
+
+-- Melee-range readout above the cluster: green MELEE when the target is in melee,
+-- gold CHARGE when out of melee but within Charge range, red OUT otherwise, blank
+-- with no attackable target (or before any melee reference is learned). Range is
+-- hitbox-aware (IsSpellInRange of a real targeted melee ability, so it reads
+-- correctly on large bosses); no yard number is obtainable for an enemy. The
+-- Charge band degrades to OUT if its check is unavailable (Charge is Battle-
+-- stance-restricted and can read nil otherwise).
+function AB:UpdateRangeIndicator()
+    local t = self.rangeText
+    if not t then return end
+    local ref = self.meleeRefSpell
+    if not ref then self:ResolveMeleeRef(); ref = self.meleeRefSpell end
+    local m = ref and spellRange(ref) or nil
+    if m == nil then
+        t:SetText("")
+    elseif m == 1 then
+        t:SetText("MELEE")
+        t:SetTextColor(0.35, 0.9, 0.45)
+    elseif spellRange("Charge") == 1 then
+        t:SetText("CHARGE")
+        t:SetTextColor(1.0, 0.82, 0.0)
+    else
+        t:SetText("OUT")
+        t:SetTextColor(0.9, 0.35, 0.35)
+    end
+end
+
+-- Rage bar fill + number. UnitPowerMax is 100 baseline (guarded if it ever
+-- reads 0 before data loads).
+function AB:UpdateRageBar()
+    local b = self.rageBar
+    if not b then return end
+    local cur = UnitPower("player", RAGE_POWER_TYPE)
+    local max = UnitPowerMax("player", RAGE_POWER_TYPE)
+    if not max or max == 0 then max = 100 end
+    b:SetMinMaxValues(0, max)
+    b:SetValue(cur)
+    self.rageLabel:SetText(cur)
 end
 
 -- Detect post-press stance flash: after a button press, if the stance changed
@@ -1047,9 +1114,9 @@ ns:On("PLAYER_LOGIN", function()
     if not ns.enabled then return end
     AB:Build()
 end)
-ns:On("SPELLS_CHANGED",      function() AB:RefreshLayout() end)
-ns:On("PLAYER_REGEN_ENABLED", function() AB:RefreshLayout(); AB:ApplyBlizzardBars() end)
-ns:On("PLAYER_ENTERING_WORLD",       function() AB:ApplyBlizzardBars(); AB:UpdateRanged() end)
+ns:On("SPELLS_CHANGED",      function() AB:ResolveMeleeRef(); AB:RefreshLayout() end)
+ns:On("PLAYER_REGEN_ENABLED", function() AB:RefreshLayout() end)
+ns:On("PLAYER_ENTERING_WORLD",       function() AB:UpdateRanged() end)
 ns:On("UNIT_INVENTORY_CHANGED", function(unit)
     if unit == "player" then AB:UpdateRanged() end
 end)

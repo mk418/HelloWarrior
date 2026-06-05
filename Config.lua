@@ -7,8 +7,8 @@ local accountDefaults = {}
 
 local charDefaults = {
     role = "dps",
-    hideBlizzardBars = true,
     showHWBars = true,
+    locked = true,
 }
 
 local function applyDefaults(target, defaults)
@@ -55,26 +55,32 @@ function Config:CreatePanel()
     end
 
     local hwBarsCB = makeCheckbox(panel, "Show HelloWarrior bars", subtitle, -24)
-    local blizzBarsCB = makeCheckbox(panel, "Hide Blizzard action bars", hwBarsCB, -4)
+    local lockCB = makeCheckbox(panel, "Lock position", hwBarsCB, -4)
+
+    local resetBtn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+    resetBtn:SetSize(120, 22)
+    resetBtn:SetPoint("TOPLEFT", lockCB, "BOTTOMLEFT", 0, -8)
+    resetBtn:SetText("Reset position")
+    resetBtn:SetScript("OnClick", function() ns.ActionBar:ResetPosition() end)
 
     local function sync()
         hwBarsCB:SetChecked(HelloWarriorCharDB.showHWBars ~= false)
-        blizzBarsCB:SetChecked(HelloWarriorCharDB.hideBlizzardBars == true)
+        lockCB:SetChecked(HelloWarriorCharDB.locked ~= false)
     end
     hwBarsCB:SetScript("OnClick", function(self) ns.ActionBar:SetHWBarsVisible(self:GetChecked()); sync() end)
-    blizzBarsCB:SetScript("OnClick", function(self) ns.ActionBar:SetBlizzardBarsHidden(self:GetChecked()); sync() end)
+    lockCB:SetScript("OnClick", function(self) ns.ActionBar:SetLocked(self:GetChecked()); sync() end)
     panel:SetScript("OnShow", sync)
 
     local help = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    help:SetPoint("TOPLEFT", blizzBarsCB, "BOTTOMLEFT", 0, -16)
+    help:SetPoint("TOPLEFT", resetBtn, "BOTTOMLEFT", 0, -16)
     help:SetJustifyH("LEFT")
     help:SetText(
         "Slash commands:\n" ..
         "  /hw config - open this panel\n" ..
-        "  /hw bars on|off - HelloWarrior bars\n" ..
-        "  /hw blizz on|off - Blizzard bars\n" ..
+        "  /hw bars [on||off] - HelloWarrior bars\n" ..
+        "  /hw pos [lock||unlock||reset] - lock / move the cluster\n" ..
         "  /hw keys - edit keybindings (hover a button, press a key)\n" ..
-        "  /hw keys clear|reset - clear or restore default keybindings\n" ..
+        "  /hw keys clear||reset - clear or restore default keybindings\n" ..
         "  /hw reset - reset all saved variables and reload"
     )
 

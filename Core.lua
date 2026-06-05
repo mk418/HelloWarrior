@@ -96,11 +96,23 @@ SlashCmdList["HELLOWARRIOR"] = function(msg)
         if arg == "on" then ns.ActionBar:SetHWBarsVisible(true)
         elseif arg == "off" then ns.ActionBar:SetHWBarsVisible(false)
         else ns.ActionBar:SetHWBarsVisible(not HelloWarriorCharDB.showHWBars) end
-    elseif cmd == "blizz" then
+    elseif cmd == "pos" then
         if not ns.enabled then return end
-        if arg == "on" then ns.ActionBar:SetBlizzardBarsHidden(false)
-        elseif arg == "off" then ns.ActionBar:SetBlizzardBarsHidden(true)
-        else ns.ActionBar:SetBlizzardBarsHidden(not HelloWarriorCharDB.hideBlizzardBars) end
+        if arg == "reset" then
+            ns.ActionBar:ResetPosition()
+            print("|cffc79c6eHelloWarrior|r position reset.")
+        elseif arg == "lock" then
+            ns.ActionBar:SetLocked(true)
+            print("|cffc79c6eHelloWarrior|r position locked.")
+        elseif arg == "unlock" then
+            ns.ActionBar:SetLocked(false)
+            print("|cffc79c6eHelloWarrior|r position unlocked -- drag the cluster to move it.")
+        else
+            local nowLocked = not HelloWarriorCharDB.locked
+            ns.ActionBar:SetLocked(nowLocked)
+            print("|cffc79c6eHelloWarrior|r position " ..
+                (nowLocked and "locked." or "unlocked -- drag the cluster to move it."))
+        end
     elseif cmd == "keys" then
         if not ns.enabled then return end
         if arg == "clear" then ns.Keybinds:ClearAll()
@@ -108,9 +120,9 @@ SlashCmdList["HELLOWARRIOR"] = function(msg)
         else ns.Keybinds:ToggleMode() end
     else
         print("|cffc79c6eHelloWarrior|r commands:")
-        print("  /hw config | /hw reset")
-        print("  /hw bars on|off  (HelloWarrior bars)")
-        print("  /hw blizz on|off (Blizzard bars)")
-        print("  /hw keys [clear|reset] (edit keybindings)")
+        print("  /hw config || /hw reset")
+        print("  /hw bars [on||off]  (HelloWarrior bars)")
+        print("  /hw pos [lock||unlock||reset]")
+        print("  /hw keys [clear||reset] (edit keybindings)")
     end
 end

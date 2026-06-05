@@ -107,6 +107,33 @@ local function shieldEquipped()
     return IsEquippedItemType and IsEquippedItemType("Shields") or false
 end
 
+-- Remaining seconds on a named HELPFUL aura on the player: math.huge if present
+-- without a running duration, nil if absent. Reads the AuraData NAMED fields
+-- (no positional-return ambiguity -- the legacy UnitBuff tuple varies by client)
+-- via C_UnitAuras, falling back to a name-only UnitBuff scan (presence only) if
+-- that API is missing.
+local GetAuraDataByIndex = C_UnitAuras and C_UnitAuras.GetAuraDataByIndex
+local function playerBuffRemaining(buffName)
+    if GetAuraDataByIndex then
+        for i = 1, 40 do
+            local aura = GetAuraDataByIndex("player", i, "HELPFUL")
+            if not aura then break end
+            if aura.name == buffName then
+                local exp = aura.expirationTime
+                if exp and exp > 0 then return exp - GetTime() end
+                return math.huge
+            end
+        end
+        return nil
+    end
+    for i = 1, 40 do
+        local n = UnitBuff("player", i)
+        if not n then break end
+        if n == buffName then return math.huge end
+    end
+    return nil
+end
+
 local function evaluateFlash(ability)
     local rule = ability.flash
     if not rule then return false end
@@ -129,12 +156,12 @@ local function evaluateFlash(ability)
     elseif t == "nodebuff" then
         return targetDebuffStacks(rule.spell) < (rule.stacks or 1)
     elseif t == "nobuff" then
-        for i = 1, 40 do
-            local n = UnitBuff("player", i)
-            if not n then break end
-            if n == rule.buff then return false end
-        end
-        return true
+        -- Flash when the buff is absent, or (with `refresh = N`) when it has N
+        -- seconds or less remaining -- a "recast soon" reminder.
+        local remaining = playerBuffRemaining(rule.buff)
+        if remaining == nil then return true end
+        if rule.refresh then return remaining <= rule.refresh end
+        return false
     end
     return false
 end
