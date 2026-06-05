@@ -81,22 +81,25 @@ local DEFENSIVE_SWITCH = ("/cast [nostance:%d] %s"):format(
     ns.Abilities.STANCE_ID.defensive,
     ns.Abilities.STANCE_SPELL[ns.Abilities.STANCE_ID.defensive])
 
--- Pre-built /cancelaura blocks per role. Folded into every ability macro so
--- using an ability strips unwanted buffs -- but only out of combat: [nocombat]
--- makes each line a clean no-op in combat (Blizzard blocks buff-cancel there),
--- so the strip effectively happens on out-of-combat presses (opener / between
--- pulls). Tank also drops the Salvation threat-reducers.
+-- Pre-built /cancelaura blocks per role, folded into every ability macro so
+-- using an ability strips unwanted buffs. /cancelaura works in AND out of
+-- combat on Classic Era, and canceling a buff you don't have is a silent no-op,
+-- so these lines fire whenever you press (no [nocombat] guard). Tank also drops
+-- the Salvation threat-reducers.
 local CANCEL_BY_ROLE = {}
 do
     local function block(role)
         local lines = {}
-        for _, name in ipairs(ns.Abilities.unwantedBuffs.both) do
-            lines[#lines + 1] = "/cancelaura [nocombat] " .. name
-        end
+        -- Role-specific buffs FIRST (tank Salvation): they're the ones that
+        -- actually matter, so if a macro-length cap ever truncates the tail it
+        -- drops a cosmetic caster line, not the threat-reducing Salvation.
         if role == "tank" then
             for _, name in ipairs(ns.Abilities.unwantedBuffs.tank) do
-                lines[#lines + 1] = "/cancelaura [nocombat] " .. name
+                lines[#lines + 1] = "/cancelaura " .. name
             end
+        end
+        for _, name in ipairs(ns.Abilities.unwantedBuffs.both) do
+            lines[#lines + 1] = "/cancelaura " .. name
         end
         return lines
     end
@@ -132,7 +135,7 @@ local function buildMacro(ability, role)
     if not ability.noStartAttack then
         table.insert(lines, "/startattack")
     end
-    -- Strip unwanted buffs as a side-effect of the press (out of combat only).
+    -- Strip unwanted buffs as a side-effect of the press (in or out of combat).
     -- Role-aware; shouts and the ranged button pass no role and are untouched.
     local cancels = role and CANCEL_BY_ROLE[role]
     if cancels then
@@ -208,7 +211,12 @@ end
 local function createAbilityButton(parent, name)
     local btn = CreateFrame("Button", "HelloWarrior_" .. name, parent, "SecureActionButtonTemplate")
     btn:SetSize(BUTTON_SIZE, BUTTON_SIZE)
-    btn:RegisterForClicks("AnyDown", "AnyUp")
+    -- ONE click edge only. A secure macro button runs its full macrotext once
+    -- per registered edge, so "AnyDown","AnyUp" fired every press twice: the
+    -- down-click cast the ability (starting the GCD) and the up-click re-cast it
+    -- mid-GCD, which is what triggered the constant "That ability isn't ready
+    -- yet." Casting on up matches Blizzard's default bars and the ranged button.
+    btn:RegisterForClicks("AnyUp")
 
     local icon = btn:CreateTexture(nil, "BACKGROUND")
     icon:SetAllPoints()
@@ -238,6 +246,9 @@ local function createAbilityButton(parent, name)
     local cd = CreateFrame("Cooldown", nil, btn, "CooldownFrameTemplate")
     cd:SetAllPoints(icon)
     btn.cooldown = cd
+    -- Last (start, duration) pushed to the cooldown frame; 0,0 == cleared. The
+    -- Tick guard compares against these to skip redundant SetCooldown churn.
+    btn._cdStart, btn._cdDuration = 0, 0
 
     local stanceCorner = btn:CreateTexture(nil, "OVERLAY")
     stanceCorner:SetSize(12, 12)
@@ -698,12 +709,31 @@ function AB:Relayout()
     end
 end
 
+-- Clear the cooldown sweep AND reset the guard, so the two stay in sync. Routing
+-- every clear through here means a slot that goes valid->invalid->valid within
+-- one cooldown window can't strand the guard (which would otherwise see an
+-- unchanged start and skip re-showing the sweep).
+local function clearCooldown(btn)
+    if btn._cdStart ~= 0 then
+        btn.cooldown:Clear()
+        btn._cdStart, btn._cdDuration = 0, 0
+    end
+end
+
 local function updateCooldown(btn, spellName)
     local start, duration = GetSpellCooldown(spellName)
-    if start and duration and duration > 1.5 then
-        btn.cooldown:SetCooldown(start, duration)
+    -- Show EVERY cooldown, including the 1.5s GCD, so the buttons sweep together
+    -- like the default action bars (the old `duration > 1.5` guard filtered the
+    -- GCD out, which is why there was no GCD animation). SetCooldown is keyed off
+    -- the absolute start time, so re-calling it each 0.1s tick with unchanged
+    -- values doesn't restart the sweep; we still guard to avoid needless churn.
+    if start and duration and start > 0 and duration > 0 then
+        if btn._cdStart ~= start or btn._cdDuration ~= duration then
+            btn.cooldown:SetCooldown(start, duration)
+            btn._cdStart, btn._cdDuration = start, duration
+        end
     else
-        btn.cooldown:Clear()
+        clearCooldown(btn)
     end
 end
 
@@ -884,7 +914,7 @@ function AB:Tick()
             updateStanceCorner(btn)
             applyFlash(btn, flashResults[ab.name] or {})
         else
-            btn.cooldown:Clear()
+            clearCooldown(btn)
             applyFlash(btn, {})
         end
     end
