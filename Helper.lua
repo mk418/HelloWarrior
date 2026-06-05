@@ -205,8 +205,22 @@ end
 -- (rage post-stance-switch). The Bloodrage helper flashes when the would-be
 -- top-priority rule-met ability is unaffordable, regardless of whether it's
 -- a current candidate.
+-- True when you're near the rage cap IN COMBAT -- the single shared trigger for
+-- the rage-cap warning. Both the rage bar throb (ActionBar) and the rage-dump
+-- cue below (Heroic Strike / Cleave light up) read this, so the bar and the
+-- buttons light together. Max rage is 100 on Classic Era, but we drive it off
+-- UnitPowerMax to be safe.
+local RAGE_CAP_FRACTION = 0.80
+function Helper:IsRageCapping()
+    if not InCombatLockdown() then return false end
+    local max = UnitPowerMax("player", RAGE_POWER_TYPE)
+    if not max or max == 0 then return false end
+    return (UnitPower("player", RAGE_POWER_TYPE) / max) >= RAGE_CAP_FRACTION
+end
+
 function Helper:Compute(role)
     local list = (role == "tank") and ns.Abilities.tank or ns.Abilities.dps
+    local rageCapping = self:IsRageCapping()
 
     local affordableFlashing = {}
     local optimalAffordable, optAffPrio = nil, math.huge
@@ -255,6 +269,15 @@ function Helper:Compute(role)
         elseif affordableFlashing[ab.name] then
             r.soft = true
             r.hard = (ab == optimalAffordable)
+        end
+        -- Rage-cap dump: near the rage cap in combat, the rage-dump abilities
+        -- (Heroic Strike / Cleave) light up HARD so you spend the excess into
+        -- them. They're off the GCD, so this is ADDITIVE to whatever GCD ability
+        -- is optimal -- both can glow at once (press the GCD pick, queue the
+        -- dump). Only when learned and affordable (at >=80% rage you can be sure).
+        if rageCapping and ab.rageDump and GetSpellInfo(ab.name) and isAffordable(ab) then
+            r.soft = true
+            r.hard = true
         end
         results[ab.name] = r
     end

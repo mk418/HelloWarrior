@@ -20,7 +20,7 @@ A lean, opinionated ability manager for World of Warcraft Classic Era Warriors. 
         │ ⛨  ⚔  ☠     │   rage bar  (top half) │  DPS /  │  header row
         │ stances    │   swing timer (bottom) │  TANK   │
         ├────────────┴───────────────────────┴─────────┤
-        │ [ranged] [Battle][Demo][Intim][Howl] [racial] │  shouts + race racials
+        │ [ranged] [Battle][Demo][Intim] [racial] [swap]│  shouts, racials, off-hand swap
         ├───────────────────────────────────────────────┤
         │ [■][■][■][■][■][■][■]                          │  ability grid
         │ [■][■][■][■][■][■][■]                          │  (role-adaptive, collapses
@@ -30,7 +30,7 @@ A lean, opinionated ability manager for World of Warcraft Classic Era Warriors. 
 
 - One **draggable container** holds everything; **locked by default** (`/hw pos unlock` to move, a faint backdrop marks "move mode").
 - The **ability grid** swaps its whole macro set between DPS and tank via a secure snippet; hidden talents collapse within each row. DPS auto-wraps at 7/row; tank uses an explicit row layout.
-- The **shouts row** carries the shouts, a weapon-adaptive ranged button, and the player's **own race racials** (Stoneform, Blood Fury, …) appended after the shouts.
+- The **shouts row** carries the shouts, a weapon-adaptive ranged button, the player's **own race racials** (Stoneform, Blood Fury, …) appended after the shouts, and an **off-hand swap** button at the end.
 - The **header** packs the stance buttons (left), the role toggle (right), and a stacked **rage bar + swing timer** between them.
 
 ## Current scope (implemented)
@@ -41,16 +41,17 @@ A lean, opinionated ability manager for World of Warcraft Classic Era Warriors. 
 - Single click-edge (`AnyUp`) so a press fires the macro once (not twice).
 - **Buff auto-cancel** — ability macros `/cancelaura` wasted caster blessings (and Salvation for tanks) so they fall off as you engage.
 - Weapon-adaptive **ranged button** (`[worn:Guns]…` picks Shoot/Throw).
+- **In-combat off-hand swap** — one secure button toggles the off-hand between a saved weapon and a saved shield via a single self-evaluating `/equipslot [equipped:Shields] 17 <weapon>; 17 <shield>` macro (one conditional, one equip → no mid-macro bounce, no state machine, no in-combat `SetAttribute`). Only the off-hand changes, so the main-hand swing timer is untouched. Define the two ends by snapshotting your gear with `/hw swap` (once per item). The same secure `/equipslot` path is the only combat-legal swap — Equipment Manager is `#nocombat` and `EquipItemByName` only picks the item up onto the cursor in combat.
 
 **Recommendation engine** (`Helper:Compute`)
 - Priority-ranked **gold "optimal" ring** for the single best GCD press, plus soft flashes for other valid options.
-- Flash rules: `off_cd`, `rage` threshold, `proc` window (Revenge/Overpower, from the combat log), `target_hp` (Execute), `nodebuff` (Sunder ≤5 stacks), `nobuff` + `refresh` (Battle Shout, glows 10s before expiry), `helper` (Bloodrage when the top pick is unaffordable), `independent` (off-GCD presses like Shield Block).
+- Flash rules: `off_cd`, `rage` threshold, `proc` window (Revenge/Overpower, from the combat log), `target_hp` (Execute), `nodebuff` (Sunder ≤5 stacks), `nobuff` + `refresh` (Battle Shout, glows 10s before expiry), `helper` (Bloodrage when the top pick is unaffordable), `independent` (off-GCD presses like Shield Block), `interrupt` (Pummel / Shield Bash glow when the target is mid-interruptible-cast and the kick is ready — fails open, since the not-interruptible flag is unreliable on 1.15.x).
 - Affordability accounts for rage **after** a stance switch (Tactical Mastery retention).
 - **On-next-swing abilities** (Heroic Strike / Cleave) are kept out of the optimal competition — they're queued in parallel, not pressed instead of a GCD ability — so Bloodthirst/Sunder win the recommendation while tanking.
 
 **Combat info**
 - **Swing timer** — main-hand, fills toward the next swing, hitbox-driven from the combat log (`SWING_*` plus the `SPELL_*` events for Heroic Strike / Cleave / Slam, which replace the white swing), rescaled on haste changes, with a seconds readout.
-- **Rage bar** — current rage with a number, stacked with the swing timer in the header.
+- **Rage bar** — current rage with a number, stacked with the swing timer in the header; throbs from red toward a hot warning colour at ≥80% rage in combat (the **rage-cap warning**), and **Heroic Strike / Cleave light up** at the same threshold so you dump the excess into them before it wastes. One shared trigger (`Helper:IsRageCapping`) fires both.
 - **Melee-range indicator** — green `MELEE` / gold `CHARGE` / red `OUT`, hitbox-aware via `IsSpellInRange` of a real targeted melee ability; blank with no target.
 - **Per-button out-of-range red tint**, GCD + cooldown sweeps, **queued-on-next-swing** autocast shine on Heroic Strike / Cleave, **active-stance** shine, rage/usability icon tint, stance-requirement corner badges.
 
@@ -101,10 +102,9 @@ Unlike HelloTotems (which ships a `Bindings.xml`), HelloWarrior binds at runtime
 
 ## Ideas / TODO
 
-Reactive combat cues (the biggest remaining gap):
-- **Interrupt alert** — when the target starts an *interruptible* cast (`UNIT_SPELLCAST_START`/`CHANNEL_START` + the not-interruptible flag), flash Pummel (Berserker) / Shield Bash (Defensive·Battle) and/or a banner. Highest-value add.
-- **Rage-cap warning** — flash the rage bar near 100 so excess rage gets dumped into Heroic Strike instead of wasted.
-- **Sound cues (opt-in)** — a short sound on Overpower/Revenge proc, entering Execute range, or an interrupt being available.
+Reactive combat cues:
+- **Sound cues (opt-in)** — a short sound on Overpower/Revenge proc, entering Execute range, or an interrupt becoming available. (The interrupt *visual* alert already ships; this would be the optional audio half.)
+- **Interrupt banner (opt-in)** — an optional on-screen banner / sound to pair with the existing Pummel·Shield Bash interrupt glow, for when a button flash isn't loud enough.
 
 Maintenance tracking (extends the Sunder / Battle Shout upkeep flashes):
 - **Debuff upkeep flashes** — Thunder Clap (attack-speed slow), Demoralizing Shout (AP reduction), Rend — flash when missing/expiring on the target.

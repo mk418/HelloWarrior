@@ -11,6 +11,14 @@ local SECTION_GAP = 10
 local RAGE_POWER_TYPE = Enum and Enum.PowerType and Enum.PowerType.Rage or 1
 local HEADER_BAR_HEIGHT = 12  -- rage + swing timer stack in the header band
 
+-- Rage-cap warning. While ns.Helper:IsRageCapping() is true (>=80% rage in
+-- combat -- the single shared trigger that also lights up Heroic Strike / Cleave
+-- in Helper:Compute), the rage bar throbs from its base red toward a hot warning
+-- colour so you dump the excess instead of wasting it.
+local RAGE_BASE_COLOR = { 0.78, 0.25, 0.25 }  -- rage red (the bar's resting colour)
+local RAGE_WARN_COLOR = { 1.0, 0.55, 0.10 }   -- hot orange it pulses toward
+local RAGE_WARN_PERIOD = 0.5                   -- seconds per half-cycle (full throb = 1s)
+
 -- Ranged-attack button. One macro fires whichever ranged weapon is equipped
 -- via [worn:...] conditionals, so only the matching ability is cast. "!" keeps
 -- the auto-repeat Shoot abilities firing instead of toggling off; Throw is a
@@ -653,7 +661,7 @@ function AB:Build()
     rageBar:SetPoint("LEFT", ns.StanceIndicator.frame, "RIGHT", SECTION_GAP, 6)
     rageBar:SetPoint("RIGHT", ns.RoleToggle.frame, "LEFT", -SECTION_GAP, 6)
     rageBar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
-    rageBar:SetStatusBarColor(0.78, 0.25, 0.25)  -- rage red
+    rageBar:SetStatusBarColor(RAGE_BASE_COLOR[1], RAGE_BASE_COLOR[2], RAGE_BASE_COLOR[3])  -- rage red
     rageBar:SetMinMaxValues(0, 100)
     local rageBg = rageBar:CreateTexture(nil, "BACKGROUND")
     rageBg:SetAllPoints()
@@ -1198,6 +1206,37 @@ function AB:UpdateRageBar()
     b:SetMinMaxValues(0, max)
     b:SetValue(cur)
     self.rageLabel:SetText(cur)
+    self:UpdateRageWarn()
+end
+
+-- Throb the rage bar's colour while near cap (in combat). The throb runs on the
+-- bar's own OnUpdate for a smooth per-frame lerp, independent of the 0.1s ticker;
+-- a _rageWarnOn guard installs/removes it only on the on<->off transition (like
+-- the shine cue), and the off path restores the resting red. OnUpdate doesn't
+-- fire while the cluster is hidden, so a hidden bar costs nothing.
+function AB:UpdateRageWarn()
+    local b = self.rageBar
+    if not b then return end
+    local warn = ns.Helper:IsRageCapping()
+    if warn then
+        if not b._rageWarnOn then
+            b._rageWarnOn = true
+            b._rageWarnT = 0
+            b:SetScript("OnUpdate", function(self, elapsed)
+                self._rageWarnT = (self._rageWarnT or 0) + elapsed
+                local cycle = (self._rageWarnT / RAGE_WARN_PERIOD) % 2
+                local p = cycle <= 1 and cycle or (2 - cycle)
+                self:SetStatusBarColor(
+                    RAGE_BASE_COLOR[1] + (RAGE_WARN_COLOR[1] - RAGE_BASE_COLOR[1]) * p,
+                    RAGE_BASE_COLOR[2] + (RAGE_WARN_COLOR[2] - RAGE_BASE_COLOR[2]) * p,
+                    RAGE_BASE_COLOR[3] + (RAGE_WARN_COLOR[3] - RAGE_BASE_COLOR[3]) * p)
+            end)
+        end
+    elseif b._rageWarnOn then
+        b._rageWarnOn = false
+        b:SetScript("OnUpdate", nil)
+        b:SetStatusBarColor(RAGE_BASE_COLOR[1], RAGE_BASE_COLOR[2], RAGE_BASE_COLOR[3])
+    end
 end
 
 -- Detect post-press stance flash: after a button press, if the stance changed

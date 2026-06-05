@@ -38,6 +38,10 @@ A.WORLD_BUFFS = {
 -- `onNextSwing = true` → ability is queued for the next melee swing (Heroic
 --                       Strike / Cleave); the button shows a steady "queued"
 --                       fill while IsCurrentSpell(its learned rank) is true.
+-- `rageDump = true` → ability lights up (hard flash) alongside the rage-cap
+--                       warning, i.e. when you're near the rage cap in combat
+--                       (Helper:IsRageCapping) -- the cue to spend the excess.
+--                       Off-GCD, so it's additive to the optimal GCD pick.
 -- `stance` is either a string ("any" / "battle" / "defensive" / "berserker")
 --          or a list of strings for abilities usable in multiple stances.
 --          For multi-stance, the FIRST entry is the default the macro switches into.
@@ -106,8 +110,8 @@ A.tank = {
       flash = { type = "off_cd" }, prio = 2 },
     { name = "Sunder Armor",   stance = "any",
       flash = { type = "nodebuff", spell = "Sunder Armor", stacks = 5 }, prio = 4 },
-    { name = "Heroic Strike",  stance = "any",       onNextSwing = true, flash = { type = "rage", threshold = 50 }, prio = 5 },
-    { name = "Cleave",         stance = "any", onNextSwing = true },
+    { name = "Heroic Strike",  stance = "any",       onNextSwing = true, rageDump = true, flash = { type = "rage", threshold = 50 }, prio = 5 },
+    { name = "Cleave",         stance = "any", onNextSwing = true, rageDump = true },
     { name = "Taunt",          stance = "defensive" },
     { name = "Mocking Blow",   stance = "battle" },
     -- Row 2.
@@ -150,8 +154,8 @@ A.dps = {
     { name = "Overpower",      stance = "battle",    flash = { type = "proc" },   prio = 3 },
     { name = "Sunder Armor",   stance = "any",
       flash = { type = "nodebuff", spell = "Sunder Armor", stacks = 5 }, prio = 4 },
-    { name = "Heroic Strike",  stance = "any",       onNextSwing = true, flash = { type = "rage", threshold = 50 }, prio = 5 },
-    { name = "Cleave",         stance = "any", onNextSwing = true },
+    { name = "Heroic Strike",  stance = "any",       onNextSwing = true, rageDump = true, flash = { type = "rage", threshold = 50 }, prio = 5 },
+    { name = "Cleave",         stance = "any", onNextSwing = true, rageDump = true },
     -- Utility / cooldowns.
     { name = "Pummel",         stance = "berserker",
       flash = { type = "interrupt", independent = true } },
