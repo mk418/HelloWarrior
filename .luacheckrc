@@ -42,6 +42,14 @@ read_globals = {
     "print",
     "C_Timer",
     "Enum",
+    -- Keybindings (secure CLICK override bindings) + key state
+    "SetOverrideBindingClick",
+    "ClearOverrideBindings",
+    "GetMouseFocus",
+    "GetMouseFoci",
+    "IsShiftKeyDown",
+    "IsControlKeyDown",
+    "IsAltKeyDown",
     -- Action-button proc-glow overlay (Blizzard FrameXML globals)
     "ActionButton_ShowOverlayGlow",
     "ActionButton_HideOverlayGlow",
@@ -62,6 +70,7 @@ read_globals = {
     "GetTalentInfo",
     -- Units
     "UnitClass",
+    "UnitRace",
     "UnitPower",
     "UnitExists",
     "UnitIsDead",

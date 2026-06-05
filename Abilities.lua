@@ -49,6 +49,25 @@ A.shouts = {
     { name = "Piercing Howl",      stance = "any", talentOnly = true, noStartAttack = true },
 }
 
+-- Active race racials worth a button for a warrior, keyed by the locale-
+-- independent race token (the 2nd return of UnitRace: note "Scourge" = Undead
+-- and "NightElf" is one word). Only the player's own race is ever shown -- you
+-- can't cast another race's racial -- so listing them all is harmless. ACTIVE
+-- (castable) racials only; passives (weapon specs, resistances) get no button.
+-- Every Classic Era racial is off the GCD, so none block the rotation, and
+-- noStartAttack keeps a defensive/utility racial from starting auto-attack.
+A.racials = {
+    Human    = { { name = "Perception",          stance = "any", noStartAttack = true } }, -- stealth detection (PvP niche)
+    Dwarf    = { { name = "Stoneform",            stance = "any", noStartAttack = true } }, -- clears bleed/poison/disease + armor
+    Gnome    = { { name = "Escape Artist",        stance = "any", noStartAttack = true } }, -- breaks roots/snares
+    NightElf = { { name = "Shadowmeld",           stance = "any", noStartAttack = true } }, -- situational stealth (out of combat)
+    Orc      = { { name = "Blood Fury",           stance = "any", noStartAttack = true } }, -- +attack power burst
+    Scourge  = { { name = "Will of the Forsaken", stance = "any", noStartAttack = true },   -- breaks fear/charm/sleep
+                 { name = "Cannibalize",          stance = "any", noStartAttack = true } }, -- out-of-combat corpse heal
+    Tauren   = { { name = "War Stomp",            stance = "any", noStartAttack = true } }, -- AoE stun / interrupt
+    Troll    = { { name = "Berserking",           stance = "any", noStartAttack = true } }, -- haste burst
+}
+
 -- Buffs to strip off a warrior. The ability macros /cancelaura these out of
 -- combat (Blizzard blocks buff-cancel in combat), so they fall off when you use
 -- an ability to engage. `both` = caster/mana blessings wasted on a Rage class;

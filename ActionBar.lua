@@ -422,18 +422,30 @@ function AB:Build()
 
     local tankAbils, dpsAbils = ns.Abilities.tank, ns.Abilities.dps
     local shoutAbils = ns.Abilities.shouts
+    -- The bottom row also carries the player's own active race racials (only
+    -- your race contributes; you can't cast another's). Filter to spells you
+    -- actually have so a typo'd/unknown entry simply doesn't appear. raceToken
+    -- is UnitRace's 2nd, locale-independent return.
+    local _, raceToken = UnitRace("player")
+    local racialAbils = {}
+    for _, ab in ipairs((ns.Abilities.racials and ns.Abilities.racials[raceToken]) or {}) do
+        if GetSpellInfo(ab.name) then racialAbils[#racialAbils + 1] = ab end
+    end
     local maxAbil = math.max(#tankAbils, #dpsAbils)
     local rows = math.ceil(maxAbil / ABILITIES_PER_ROW)
     local rowWidth = ABILITIES_PER_ROW * BUTTON_SIZE + (ABILITIES_PER_ROW - 1) * BUTTON_GAP
     local abilitiesHeight = rows * BUTTON_SIZE + (rows - 1) * ROW_GAP
-    -- +1 column for the prepended ranged-attack button.
-    local shoutsWidth = (#shoutAbils + 1) * BUTTON_SIZE + #shoutAbils * BUTTON_GAP
+    -- Bottom row width: ranged button (+1) + shouts + racials.
+    local shoutSlots = #shoutAbils + #racialAbils
+    local shoutsWidth = (shoutSlots + 1) * BUTTON_SIZE + shoutSlots * BUTTON_GAP
     local headerHeight = 24
     local totalHeight = headerHeight + SECTION_GAP + abilitiesHeight + SECTION_GAP + BUTTON_SIZE
 
-    -- Container (drag handle for the whole cluster).
+    -- Container (drag handle for the whole cluster). Width is the wider of the
+    -- ability grid and the bottom row -- a long shouts+racials row (e.g. Undead)
+    -- can exceed the 7-wide grid, and we don't want it clipped.
     local container = CreateFrame("Frame", "HelloWarrior_Container", UIParent)
-    container:SetSize(rowWidth, totalHeight)
+    container:SetSize(math.max(rowWidth, shoutsWidth), totalHeight)
     container:SetMovable(true)
     container:EnableMouse(true)
     container:RegisterForDrag("LeftButton")
@@ -446,7 +458,9 @@ function AB:Build()
     -- Abilities bar (secure handler for role swap).
     local bar = CreateFrame("Frame", "HelloWarrior_AbilityBar", container, "SecureHandlerStateTemplate")
     bar:SetSize(rowWidth, abilitiesHeight)
-    bar:SetPoint("TOPLEFT", container, "TOPLEFT", 0, -(headerHeight + SECTION_GAP + BUTTON_SIZE + SECTION_GAP))
+    -- Anchored by TOP so the grid stays centred even when the container is wider
+    -- than the grid (long bottom row).
+    bar:SetPoint("TOP", container, "TOP", 0, -(headerHeight + SECTION_GAP + BUTTON_SIZE + SECTION_GAP))
     self.bar = bar
 
     -- Create one button per slot up to maxAbil.
@@ -474,13 +488,9 @@ function AB:Build()
     bar:SetAttribute("btnCount", maxAbil)
 
     bar:SetAttribute("baseRole", HelloWarriorCharDB.role or "dps")
-    bar:SetAttribute("modActive", "0")
 
     bar:SetAttribute("UpdateRole", [[
-        local base = self:GetAttribute("baseRole") or "dps"
-        local mod = self:GetAttribute("modActive") == "1"
-        local effective = base
-        if mod then effective = (base == "tank") and "dps" or "tank" end
+        local effective = self:GetAttribute("baseRole") or "dps"
         local count = self:GetAttribute("btnCount") or 0
         for i = 1, count do
             local b = self:GetFrameRef("btn" .. i)
@@ -499,16 +509,13 @@ function AB:Build()
         self:SetAttribute("effectiveRole", effective)
     ]])
 
-    bar:SetAttribute("_onstate-mod", [[
-        self:SetAttribute("modActive", (newstate == "on") and "1" or "0")
-        self:RunAttribute("UpdateRole")
-    ]])
     bar:HookScript("OnAttributeChanged", function(self, name, value)
         if name and name:lower() == "effectiverole" then
             AB:OnRoleApplied(value)
         end
     end)
-    RegisterStateDriver(bar, "mod", "[mod:alt] on; off")
+    -- Role is swapped only by the RoleToggle button now (no hold-Alt overlay) --
+    -- Alt is freed for the shout-bar keybindings.
 
     -- Shouts bar (no role swap; all share both roles). The ranged-attack
     -- button is prepended as the leftmost slot -- it's role-agnostic too.
@@ -555,6 +562,20 @@ function AB:Build()
             applyAbilityToButton(btn, ab)
         end
         self.shoutButtons[i] = btn
+    end
+
+    -- Append the player's race racials after the shouts. They join
+    -- self.shoutButtons, so Relayout, the cooldown ticker, and keybind positions
+    -- all treat them exactly like shouts (off-GCD, no flash, no /startattack).
+    -- buildMacro is called with no role, so they get a bare "#showtooltip /cast".
+    for ri, ab in ipairs(racialAbils) do
+        local prev = self.shoutButtons[#self.shoutButtons]
+        local btn = createAbilityButton(shouts, "Racial" .. ri)
+        btn:SetPoint("LEFT", prev or ranged, "RIGHT", BUTTON_GAP, 0)
+        btn:SetAttribute("type", "macro")
+        btn:SetAttribute("macrotext", buildMacro(ab))
+        applyAbilityToButton(btn, ab)
+        self.shoutButtons[#self.shoutButtons + 1] = btn
     end
 
     -- Header row: stance indicator + role toggle.
@@ -706,6 +727,14 @@ function AB:Relayout()
             placeRow(vis, self.shoutsBar,
                 (self.shoutsBar:GetWidth() - rowSpan(#vis)) / 2, 0)
         end
+    end
+
+    -- Re-bind position->button keybindings and repaint hotkey labels now that
+    -- the visible layout is settled (out of combat; SetOverrideBindingClick is
+    -- combat-protected). Runs on login, role swap, talent change, and regen.
+    if ns.Keybinds then
+        ns.Keybinds:Apply()
+        ns.Keybinds:RefreshLabels()
     end
 end
 

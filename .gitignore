@@ -1,2 +1,5 @@
 # macOS Finder metadata — gets sprinkled everywhere by the OS.
 .DS_Store
+
+# Claude Code session scratch (workflow scripts, transcripts) — not project files.
+.claude/

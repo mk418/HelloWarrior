@@ -13,3 +13,4 @@ Helper.lua
 StanceIndicator.lua
 RoleToggle.lua
 ActionBar.lua
+Keybinds.lua

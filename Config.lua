@@ -73,6 +73,8 @@ function Config:CreatePanel()
         "  /hw config - open this panel\n" ..
         "  /hw bars on|off - HelloWarrior bars\n" ..
         "  /hw blizz on|off - Blizzard bars\n" ..
+        "  /hw keys - edit keybindings (hover a button, press a key)\n" ..
+        "  /hw keys clear|reset - clear or restore default keybindings\n" ..
         "  /hw reset - reset all saved variables and reload"
     )
 
