@@ -8,6 +8,7 @@ local BUTTON_GAP = 4
 local ABILITIES_PER_ROW = 7
 local ROW_GAP = 4
 local SECTION_GAP = 10
+local SWING_BAR_HEIGHT = 12  -- keep in sync with SwingTimer.lua BAR_HEIGHT
 
 -- Ranged-attack button. One macro fires whichever ranged weapon is equipped
 -- via [worn:...] conditionals, so only the matching ability is cast. "!" keeps
@@ -17,6 +18,26 @@ local SECTION_GAP = 10
 local RANGED_SLOT = 18  -- INVSLOT_RANGED
 local RANGED_MACRO = "/cast [worn:Guns] !Shoot Gun; [worn:Bows] !Shoot Bow; [worn:Crossbows] !Shoot Crossbow; [worn:Thrown] Throw"
 local RANGED_EMPTY_ICON = "Interface\\Icons\\Ability_Marksmanship"
+
+-- True while `name`'s ability is queued for the next melee swing. Resolve the
+-- player's LEARNED-rank spellID straight from the name via GetSpellInfo's 7th
+-- return -- the same call the rest of the addon uses -- then ask IsCurrentSpell.
+-- (Resolving by name, not a hardcoded base ID, matters because IsCurrentSpell is
+-- rank-specific and the learned rank is what /cast queues; an earlier version
+-- used GetSpellName(baseID), but that global takes a spellbook index on Classic
+-- Era, not a spell ID, so it silently returned the wrong thing.) Heroic Strike
+-- and Cleave are instant, so a "current" spell can only mean "queued on next
+-- swing" -- there's no cast bar to confuse it with.
+-- Resolve once: the global on Classic Era, C_Spell on newer-API clients. If
+-- neither exists the feature self-disables (isQueued returns false) instead of
+-- erroring every tick.
+local isCurrentSpell = IsCurrentSpell or (C_Spell and C_Spell.IsCurrentSpell)
+
+local function isQueued(name)
+    if not isCurrentSpell then return false end
+    local rankID = name and select(7, GetSpellInfo(name))
+    return rankID and isCurrentSpell(rankID) or false
+end
 
 -- ---------- helpers --------------------------------------------------------
 
@@ -256,6 +277,12 @@ local function createAbilityButton(parent, name)
     stanceCorner:Hide()
     btn.stanceCorner = stanceCorner
 
+    -- "Queued on next swing" cue (Heroic Strike / Cleave waiting for the next
+    -- melee swing): the shared pet-autocast spinning shine, toggled in AB:Tick.
+    -- The marching sparkle shimmer reads distinctly from the gold optimal ring
+    -- (solid pulsing edge) and the cyan stance-press ring (single fading edge).
+    ns:AttachShine(btn, BUTTON_SIZE)
+
     -- Hard flash: fallback ring (only used when Blizzard's overlay isn't available).
     btn.hardFlash = createBorderGlow(btn, 4, 1, 0.95, 0.4, 1.0, 20)
     btn.hardFlash.pulseFrom = 0.55
@@ -399,6 +426,7 @@ local function applyAbilityToButton(btn, ability)
         btn.currentAbilityName = nil
         btn.icon:SetTexture(nil)
         btn.stanceCorner:Hide()
+        ns:SetShine(btn, false)
         return
     end
     btn.currentAbility = ability
@@ -440,6 +468,7 @@ function AB:Build()
     local shoutsWidth = (shoutSlots + 1) * BUTTON_SIZE + shoutSlots * BUTTON_GAP
     local headerHeight = 24
     local totalHeight = headerHeight + SECTION_GAP + abilitiesHeight + SECTION_GAP + BUTTON_SIZE
+        + SECTION_GAP + SWING_BAR_HEIGHT
 
     -- Container (drag handle for the whole cluster). Width is the wider of the
     -- ability grid and the bottom row -- a long shouts+racials row (e.g. Undead)
@@ -584,6 +613,9 @@ function AB:Build()
 
     ns.RoleToggle:Build(container, bar)
     ns.RoleToggle.frame:SetPoint("TOPRIGHT", container, "TOPRIGHT", 0, -1)
+
+    -- Swing timer, a full-width bar under the ability grid (anchored to AB.bar).
+    ns.SwingTimer:Build(container, rowWidth, SECTION_GAP)
 
     -- Push the initial role through the snippet (out of combat).
     bar:Execute([[ self:RunAttribute("UpdateRole") ]])
@@ -942,9 +974,11 @@ function AB:Tick()
             updateRageTint(btn, ab.name)
             updateStanceCorner(btn)
             applyFlash(btn, flashResults[ab.name] or {})
+            ns:SetShine(btn, ab.onNextSwing and isQueued(ab.name), 0.45, 0.8, 1.0)
         else
             clearCooldown(btn)
             applyFlash(btn, {})
+            ns:SetShine(btn, false)
         end
     end
 
@@ -1027,3 +1061,7 @@ ns:On("UNIT_POWER_UPDATE", function(unit)
     if unit == "player" then AB:Tick() end
 end)
 ns:On("PLAYER_TARGET_CHANGED", function() AB:Tick() end)
+-- Fires when an on-next-swing ability (Heroic Strike / Cleave) is queued, fires,
+-- or is cancelled -- refresh the queued-glow immediately instead of waiting for
+-- the 0.1s ticker.
+ns:On("CURRENT_SPELL_CAST_CHANGED", function() AB:Tick() end)

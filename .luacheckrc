@@ -41,6 +41,7 @@ read_globals = {
     "InCombatLockdown",
     "print",
     "C_Timer",
+    "C_Spell",
     "Enum",
     -- Keybindings (secure CLICK override bindings) + key state
     "SetOverrideBindingClick",
@@ -54,6 +55,9 @@ read_globals = {
     "ActionButton_ShowOverlayGlow",
     "ActionButton_HideOverlayGlow",
     "ActionButton_OverlayGlowAnimOutFinished",
+    -- Pet-autocast spinning shine (used for the queued-on-next-swing cue)
+    "AutoCastShine_AutoCastStart",
+    "AutoCastShine_AutoCastStop",
     -- Inventory
     "GetInventoryItemTexture",
     "IsEquippedItemType",
@@ -62,6 +66,7 @@ read_globals = {
     "GetSpellCooldown",
     "GetSpellPowerCost",
     "IsUsableSpell",
+    "IsCurrentSpell",
     -- Stances
     "GetShapeshiftForm",
     -- Talents
@@ -71,6 +76,7 @@ read_globals = {
     -- Units
     "UnitClass",
     "UnitRace",
+    "UnitAttackSpeed",
     "UnitPower",
     "UnitExists",
     "UnitIsDead",

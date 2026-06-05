@@ -28,6 +28,38 @@ function ns:On(event, fn)
     table.insert(ns.eventHandlers[event], fn)
 end
 
+-- Shared "shine" cue: Blizzard's pet-autocast spinning sparkles. AttachShine
+-- once per (named) button, then SetShine(btn, on) to toggle. The shine frame
+-- needs a globally-unique name -- its template OnLoad fills its sparkles from
+-- _G[name .. i] -- so we derive it from the button's name. The btn._shineOn
+-- guard means AutoCastShine_AutoCastStart (which re-seeds the sparkles on every
+-- call) fires only on an off->on transition, so SetShine is safe to call every
+-- tick. Self-disables (no-op, no error) if the shine API is absent on this build.
+function ns:AttachShine(btn, size)
+    local shine = CreateFrame("Frame", btn:GetName() .. "Shine", btn, "AutoCastShineTemplate")
+    shine:SetSize(size, size)
+    shine:SetPoint("CENTER", btn, "CENTER", 0, 0)
+    shine:SetFrameLevel((btn:GetFrameLevel() or 0) + 4)
+    shine:Hide()
+    btn._shine = shine
+    btn._shineOn = false
+    return shine
+end
+
+function ns:SetShine(btn, on, r, g, b)
+    if not btn._shine then return end
+    on = on and true or false
+    if btn._shineOn == on then return end
+    if on then
+        btn._shine:Show()
+        if AutoCastShine_AutoCastStart then AutoCastShine_AutoCastStart(btn._shine, r, g, b) end
+    else
+        if AutoCastShine_AutoCastStop then AutoCastShine_AutoCastStop(btn._shine) end
+        btn._shine:Hide()
+    end
+    btn._shineOn = on
+end
+
 ns.eventFrame:RegisterEvent("ADDON_LOADED")
 ns.eventFrame:RegisterEvent("PLAYER_LOGIN")
 

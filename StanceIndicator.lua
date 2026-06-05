@@ -37,6 +37,10 @@ local function createStanceButton(parent, stanceId)
     end)
     btn:SetScript("OnLeave", GameTooltip_Hide)
 
+    -- Active-stance cue: the shared pet-autocast spinning shine, lit on whichever
+    -- stance you're currently in (toggled in SI:Refresh).
+    ns:AttachShine(btn, SIZE)
+
     return btn
 end
 
@@ -71,6 +75,9 @@ function SI:Refresh()
         if learned then
             btn.icon:SetVertexColor(i == current and 1 or 0.5, i == current and 1 or 0.5, i == current and 1 or 0.5)
         end
+        -- Shine the active stance. Safe in combat (texture/anim toggle, not
+        -- protected), so it runs even when the Show/Hide above is skipped.
+        ns:SetShine(btn, learned and i == current, 0.45, 0.8, 1.0)
     end
 end
 

@@ -13,4 +13,5 @@ Helper.lua
 StanceIndicator.lua
 RoleToggle.lua
 ActionBar.lua
+SwingTimer.lua
 Keybinds.lua

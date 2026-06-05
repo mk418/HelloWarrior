@@ -163,12 +163,19 @@ function Helper:Compute(role)
     for _, ab in ipairs(list) do
         if ab.flash and ab.flash.type ~= "helper" and not ab.flash.independent and evaluateFlash(ab) then
             local p = resolvePriority(ab) or math.huge
-            if p < topRuleMetPrio then
+            -- On-next-swing abilities (Heroic Strike / Cleave) are off the GCD:
+            -- you queue them in PARALLEL with a GCD press, not instead of one. So
+            -- they keep their soft "you've got the rage, queue it" flash below,
+            -- but never win the gold "optimal" ring (which is the best GCD press)
+            -- nor trigger the Bloodrage helper. This keeps Bloodthirst/Sunder the
+            -- recommendation rather than Heroic Strike.
+            local rotational = not ab.onNextSwing
+            if rotational and p < topRuleMetPrio then
                 topRuleMet, topRuleMetPrio = ab, p
             end
             if isAffordable(ab) then
                 affordableFlashing[ab.name] = true
-                if p < optAffPrio then
+                if rotational and p < optAffPrio then
                     optimalAffordable, optAffPrio = ab, p
                 end
             end

@@ -32,6 +32,9 @@ A.WORLD_BUFFS = {
 -- `talentOnly = true` → button is hidden if the spell isn't in the spellbook
 --                      (baseline spells the player hasn't reached the level for show desaturated instead).
 -- `requiresShield = true` → the ability's flash only fires when a shield is equipped.
+-- `onNextSwing = true` → ability is queued for the next melee swing (Heroic
+--                       Strike / Cleave); the button shows a steady "queued"
+--                       fill while IsCurrentSpell(its learned rank) is true.
 -- `stance` is either a string ("any" / "battle" / "defensive" / "berserker")
 --          or a list of strings for abilities usable in multiple stances.
 --          For multi-stance, the FIRST entry is the default the macro switches into.
@@ -100,8 +103,8 @@ A.tank = {
       flash = { type = "off_cd" }, prio = 2 },
     { name = "Sunder Armor",   stance = "any",
       flash = { type = "nodebuff", spell = "Sunder Armor", stacks = 5 }, prio = 4 },
-    { name = "Heroic Strike",  stance = "any",       flash = { type = "rage", threshold = 50 }, prio = 5 },
-    { name = "Cleave",         stance = "any" },
+    { name = "Heroic Strike",  stance = "any",       onNextSwing = true, flash = { type = "rage", threshold = 50 }, prio = 5 },
+    { name = "Cleave",         stance = "any", onNextSwing = true },
     { name = "Taunt",          stance = "defensive" },
     { name = "Mocking Blow",   stance = "battle" },
     -- Row 2.
@@ -143,8 +146,8 @@ A.dps = {
     { name = "Overpower",      stance = "battle",    flash = { type = "proc" },   prio = 3 },
     { name = "Sunder Armor",   stance = "any",
       flash = { type = "nodebuff", spell = "Sunder Armor", stacks = 5 }, prio = 4 },
-    { name = "Heroic Strike",  stance = "any",       flash = { type = "rage", threshold = 50 }, prio = 5 },
-    { name = "Cleave",         stance = "any" },
+    { name = "Heroic Strike",  stance = "any",       onNextSwing = true, flash = { type = "rage", threshold = 50 }, prio = 5 },
+    { name = "Cleave",         stance = "any", onNextSwing = true },
     -- Utility / cooldowns.
     { name = "Pummel",         stance = "berserker" },
     { name = "Death Wish",     stance = "any", talentOnly = true, noStartAttack = true },
