@@ -30,28 +30,6 @@ local function createStanceButton(parent, stanceId)
     icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
     btn.icon = icon
 
-    -- Active highlight: yellow ring (border, not fill).
-    local ring = CreateFrame("Frame", nil, btn)
-    ring:SetAllPoints(btn)
-    ring:Hide()
-    local function edge()
-        local t = ring:CreateTexture(nil, "OVERLAY")
-        t:SetTexture("Interface\\Buttons\\WHITE8x8")
-        t:SetVertexColor(1, 0.85, 0, 1)
-        t:SetBlendMode("ADD")
-        return t
-    end
-    local th = 2
-    local top = edge(); top:SetHeight(th)
-    top:SetPoint("TOPLEFT", -th, th); top:SetPoint("TOPRIGHT", th, th)
-    local bot = edge(); bot:SetHeight(th)
-    bot:SetPoint("BOTTOMLEFT", -th, -th); bot:SetPoint("BOTTOMRIGHT", th, -th)
-    local left = edge(); left:SetWidth(th)
-    left:SetPoint("TOPLEFT", -th, 0); left:SetPoint("BOTTOMLEFT", -th, 0)
-    local right = edge(); right:SetWidth(th)
-    right:SetPoint("TOPRIGHT", th, 0); right:SetPoint("BOTTOMRIGHT", th, 0)
-    btn.activeBorder = ring
-
     btn:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetText(STANCE_NAMES[stanceId])
@@ -83,22 +61,20 @@ end
 function SI:Refresh()
     if not self.frame then return end
     local current = GetShapeshiftForm()
+    local inCombat = InCombatLockdown()
     for i = 1, 3 do
         local btn = self.buttons[i]
-        if GetSpellInfo(STANCE_NAMES[i]) then
-            btn:Show()
-            if i == current then
-                btn.icon:SetVertexColor(1, 1, 1)
-                btn.activeBorder:Show()
-            else
-                btn.icon:SetVertexColor(0.5, 0.5, 0.5)
-                btn.activeBorder:Hide()
-            end
-        else
-            btn:Hide()
+        local learned = GetSpellInfo(STANCE_NAMES[i]) ~= nil
+        if not inCombat then
+            if learned then btn:Show() else btn:Hide() end
+        end
+        if learned then
+            btn.icon:SetVertexColor(i == current and 1 or 0.5, i == current and 1 or 0.5, i == current and 1 or 0.5)
         end
     end
 end
+
+ns:On("PLAYER_REGEN_ENABLED", function() SI:Refresh() end)
 
 ns:On("UPDATE_SHAPESHIFT_FORM", function() SI:Refresh() end)
 ns:On("SPELLS_CHANGED", function() SI:Refresh() end)

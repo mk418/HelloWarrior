@@ -37,17 +37,18 @@ A.WORLD_BUFFS = {
 -- `combo = { modifier = "shift", use = "ItemName" }` — modifier-click uses an item first.
 
 A.shouts = {
-    { name = "Battle Shout",       stance = "any" },
-    { name = "Demoralizing Shout", stance = "any" },
-    { name = "Challenging Shout",  stance = "any",
+    { name = "Battle Shout",       stance = "any", noStartAttack = true,
+      flash = { type = "nobuff", buff = "Battle Shout" } },
+    { name = "Demoralizing Shout", stance = "any", noStartAttack = true },
+    { name = "Challenging Shout",  stance = "any", noStartAttack = true,
       combo = { modifier = "shift", use = "Limited Invulnerability Potion" } },
-    { name = "Intimidating Shout", stance = "any" },
-    { name = "Piercing Howl",      stance = "any", talentOnly = true },
+    { name = "Intimidating Shout", stance = "any", noStartAttack = true },
+    { name = "Piercing Howl",      stance = "any", talentOnly = true, noStartAttack = true },
 }
 
 A.tank = {
     { name = "Revenge",        stance = "defensive", flash = { type = "proc" },    prio = 1 },
-    { name = "Shield Block",   stance = "defensive", flash = { type = "off_cd" },  prio = 2 },
+    { name = "Shield Block",   stance = "defensive", flash = { type = "off_cd" },  prio = 2, noStartAttack = true },
     { name = "Bloodthirst",    stance = "any", talentOnly = true,
       flash = { type = "off_cd" }, prio = 3 },
     { name = "Sunder Armor",   stance = "any",
@@ -57,11 +58,11 @@ A.tank = {
     { name = "Taunt",          stance = "defensive" },
     { name = "Mocking Blow",   stance = "battle" },
     { name = "Shield Bash",    stance = { "defensive", "battle" } },
-    { name = "Intercept",      stance = "berserker" },
-    { name = "Bloodrage",      stance = "any",       flash = { type = "helper" } },
-    { name = "Death Wish",     stance = "any", talentOnly = true },
-    { name = "Shield Wall",    stance = "defensive" },
-    { name = "Last Stand",     stance = "any", talentOnly = true },
+    { name = "Intercept",      stance = "berserker", noStartAttack = true },
+    { name = "Bloodrage",      stance = "any",       flash = { type = "helper" }, noStartAttack = true },
+    { name = "Death Wish",     stance = "any", talentOnly = true, noStartAttack = true },
+    { name = "Shield Wall",    stance = "defensive", noStartAttack = true },
+    { name = "Last Stand",     stance = "any", talentOnly = true, noStartAttack = true },
 }
 
 A.dps = {
@@ -77,12 +78,12 @@ A.dps = {
     { name = "Overpower",      stance = "battle",    flash = { type = "proc" },   prio = 3 },
     { name = "Heroic Strike",  stance = "any",       flash = { type = "rage", threshold = 50 }, prio = 5 },
     { name = "Hamstring",      stance = { "berserker", "battle" } },
-    { name = "Charge",         stance = "battle" },
-    { name = "Intercept",      stance = "berserker" },
+    { name = "Charge",         stance = "battle", noStartAttack = true },
+    { name = "Intercept",      stance = "berserker", noStartAttack = true },
     { name = "Pummel",         stance = "berserker" },
     { name = "Thunder Clap",   stance = "battle" },
-    { name = "Berserker Rage", stance = "berserker" },
-    { name = "Bloodrage",      stance = "any",       flash = { type = "helper" } },
-    { name = "Recklessness",   stance = "berserker" },
-    { name = "Retaliation",    stance = "battle" },
+    { name = "Berserker Rage", stance = "berserker", noStartAttack = true },
+    { name = "Bloodrage",      stance = "any",       flash = { type = "helper" }, noStartAttack = true },
+    { name = "Recklessness",   stance = "berserker", noStartAttack = true },
+    { name = "Retaliation",    stance = "battle", noStartAttack = true },
 }

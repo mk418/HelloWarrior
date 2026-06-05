@@ -45,22 +45,6 @@ function Config:CreatePanel()
     subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
     subtitle:SetText("Ability manager for Classic Era Warriors.")
 
-    local roleLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    roleLabel:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", 0, -24)
-    roleLabel:SetText("Role:")
-
-    local tankBtn = CreateFrame("CheckButton", nil, panel, "UIRadioButtonTemplate")
-    tankBtn:SetPoint("LEFT", roleLabel, "RIGHT", 12, 0)
-    tankBtn.text = tankBtn:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    tankBtn.text:SetPoint("LEFT", tankBtn, "RIGHT", 4, 0)
-    tankBtn.text:SetText("Tank")
-
-    local dpsBtn = CreateFrame("CheckButton", nil, panel, "UIRadioButtonTemplate")
-    dpsBtn:SetPoint("LEFT", tankBtn.text, "RIGHT", 16, 0)
-    dpsBtn.text = dpsBtn:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    dpsBtn.text:SetPoint("LEFT", dpsBtn, "RIGHT", 4, 0)
-    dpsBtn.text:SetText("DPS")
-
     local function makeCheckbox(parent, label, anchorTo, yGap)
         local cb = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
         cb:SetPoint("TOPLEFT", anchorTo, "BOTTOMLEFT", 0, yGap or -8)
@@ -70,18 +54,13 @@ function Config:CreatePanel()
         return cb
     end
 
-    local hwBarsCB = makeCheckbox(panel, "Show HelloWarrior bars", roleLabel, -16)
+    local hwBarsCB = makeCheckbox(panel, "Show HelloWarrior bars", subtitle, -24)
     local blizzBarsCB = makeCheckbox(panel, "Hide Blizzard action bars", hwBarsCB, -4)
 
     local function sync()
-        local role = HelloWarriorCharDB.role or "dps"
-        tankBtn:SetChecked(role == "tank")
-        dpsBtn:SetChecked(role == "dps")
         hwBarsCB:SetChecked(HelloWarriorCharDB.showHWBars ~= false)
         blizzBarsCB:SetChecked(HelloWarriorCharDB.hideBlizzardBars == true)
     end
-    tankBtn:SetScript("OnClick", function() ns.ActionBar:SetRole("tank"); sync() end)
-    dpsBtn:SetScript("OnClick", function() ns.ActionBar:SetRole("dps"); sync() end)
     hwBarsCB:SetScript("OnClick", function(self) ns.ActionBar:SetHWBarsVisible(self:GetChecked()); sync() end)
     blizzBarsCB:SetScript("OnClick", function(self) ns.ActionBar:SetBlizzardBarsHidden(self:GetChecked()); sync() end)
     panel:SetScript("OnShow", sync)
@@ -92,7 +71,6 @@ function Config:CreatePanel()
     help:SetText(
         "Slash commands:\n" ..
         "  /hw config - open this panel\n" ..
-        "  /hw tank | /hw dps | /hw toggle - role\n" ..
         "  /hw bars on|off - HelloWarrior bars\n" ..
         "  /hw blizz on|off - Blizzard bars\n" ..
         "  /hw reset - reset all saved variables and reload"

@@ -59,12 +59,6 @@ SlashCmdList["HELLOWARRIOR"] = function(msg)
     elseif cmd == "config" then
         if not ns.enabled then return end
         ns.Config:OpenPanel()
-    elseif cmd == "tank" or cmd == "dps" then
-        if not ns.enabled then return end
-        ns.ActionBar:SetRole(cmd)
-    elseif cmd == "toggle" then
-        if not ns.enabled then return end
-        ns.ActionBar:ToggleRole()
     elseif cmd == "bars" then
         if not ns.enabled then return end
         if arg == "on" then ns.ActionBar:SetHWBarsVisible(true)
@@ -78,7 +72,6 @@ SlashCmdList["HELLOWARRIOR"] = function(msg)
     else
         print("|cffc79c6eHelloWarrior|r commands:")
         print("  /hw config | /hw reset")
-        print("  /hw tank | /hw dps | /hw toggle")
         print("  /hw bars on|off  (HelloWarrior bars)")
         print("  /hw blizz on|off (Blizzard bars)")
     end

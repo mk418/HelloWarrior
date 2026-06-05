@@ -9,10 +9,45 @@ local HEIGHT = 22
 function RT:Build(parent, bar)
     if self.frame then return end
 
-    local btn = CreateFrame("Button", "HelloWarriorRoleToggle", parent or UIParent, "SecureHandlerClickTemplate")
+    -- Macros for each direction. The toggle's macrotext is swapped by the
+    -- flip button's _onclick after each click so the next click casts the
+    -- correct stance for the new role.
+    local TO_TANK = "/cast [nostance:2] Defensive Stance\n/click HelloWarriorRoleFlip"
+    local TO_DPS  = "/cast [nostance:3] Berserker Stance\n/click HelloWarriorRoleFlip"
+
+    -- Visible toggle: macro casts the appropriate stance then /clicks the
+    -- hidden flip button to swap roles in restricted env.
+    local btn = CreateFrame("Button", "HelloWarriorRoleToggle", parent or UIParent, "SecureActionButtonTemplate")
     btn:SetSize(WIDTH, HEIGHT)
     btn:RegisterForClicks("AnyUp")
-    btn:SetFrameRef("bar", bar)
+    btn:SetAttribute("type", "macro")
+    btn:SetAttribute("macrotext", (HelloWarriorCharDB.role == "tank") and TO_DPS or TO_TANK)
+
+    -- Hidden flip button: SecureHandlerClickTemplate so its _onclick runs in
+    -- restricted env and is combat-legal.
+    local flip = CreateFrame("Button", "HelloWarriorRoleFlip", btn, "SecureHandlerClickTemplate")
+    flip:Hide()
+    flip:RegisterForClicks("AnyUp")
+    flip:SetFrameRef("bar", bar)
+    flip:SetFrameRef("toggle", btn)
+    flip:SetAttribute("toTankMacro", TO_TANK)
+    flip:SetAttribute("toDpsMacro",  TO_DPS)
+    flip:SetAttribute("_onclick", [[
+        local bar = self:GetFrameRef("bar")
+        if not bar then return end
+        local cur = bar:GetAttribute("baseRole") or "dps"
+        local new = (cur == "tank") and "dps" or "tank"
+        bar:SetAttribute("baseRole", new)
+        bar:RunAttribute("UpdateRole")
+        local toggle = self:GetFrameRef("toggle")
+        if toggle then
+            if new == "tank" then
+                toggle:SetAttribute("macrotext", self:GetAttribute("toDpsMacro"))
+            else
+                toggle:SetAttribute("macrotext", self:GetAttribute("toTankMacro"))
+            end
+        end
+    ]])
 
     local bg = btn:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints()
@@ -21,15 +56,6 @@ function RT:Build(parent, bar)
     local label = btn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     label:SetPoint("CENTER")
     btn.label = label
-
-    -- Combat-legal flip: updates bar attribute + re-runs the bar's role snippet.
-    btn:SetAttribute("_onclick", [[
-        local bar = self:GetFrameRef("bar")
-        if not bar then return end
-        local cur = bar:GetAttribute("baseRole") or "dps"
-        bar:SetAttribute("baseRole", (cur == "tank") and "dps" or "tank")
-        bar:RunAttribute("UpdateRole")
-    ]])
 
     -- Non-secure post-click: persist and refresh label.
     btn:HookScript("OnClick", function()

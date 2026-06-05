@@ -8,7 +8,6 @@ local BUTTON_GAP = 4
 local ABILITIES_PER_ROW = 8
 local ROW_GAP = 4
 local SECTION_GAP = 10
-local RAGE_POWER_TYPE = Enum and Enum.PowerType and Enum.PowerType.Rage or 1
 
 -- ---------- helpers --------------------------------------------------------
 
@@ -61,7 +60,9 @@ local function buildMacro(ability)
             stanceIdList(ability.stance), defaultStanceSpell(ability.stance)))
         table.insert(lines, "/cast " .. ability.name)
     end
-    table.insert(lines, "/startattack")
+    if not ability.noStartAttack then
+        table.insert(lines, "/startattack")
+    end
     return table.concat(lines, "\n")
 end
 
@@ -78,12 +79,31 @@ local function stanceIconTexture(sid)
     return icon
 end
 
--- Four-sided border ring around a button. Returns a Frame whose alpha controls
--- all four edge textures together, so animating the frame's alpha pulses the
--- whole ring without painting over the icon underneath.
-local function createBorderGlow(btn, thickness, r, g, b, a)
+-- Manual pulse via OnUpdate. Triangle-wave alpha between `from` and `to`,
+-- one full bounce per `period` seconds. Replaces AnimationGroup pulsing
+-- because the BOUNCE/REPEAT alpha animations weren't actually animating
+-- the frame's alpha here.
+local function startPulse(frame, from, to, period)
+    frame._pulseT = 0
+    frame:SetScript("OnUpdate", function(self, elapsed)
+        self._pulseT = (self._pulseT or 0) + elapsed
+        local cycle = (self._pulseT / period) % 2
+        local progress = cycle <= 1 and cycle or (2 - cycle)
+        self:SetAlpha(from + (to - from) * progress)
+    end)
+end
+
+local function stopPulse(frame)
+    frame:SetScript("OnUpdate", nil)
+end
+
+-- Four-sided rectangular border ring around a button. Frame alpha controls
+-- all four edge textures at once.
+local function createBorderGlow(btn, thickness, r, g, b, a, outset)
+    outset = outset or 0
     local frame = CreateFrame("Frame", nil, btn)
-    frame:SetAllPoints(btn)
+    frame:SetPoint("CENTER", btn, "CENTER", 0, -1)
+    frame:SetSize(BUTTON_SIZE + 2 * outset, BUTTON_SIZE + 2 * outset)
     frame:SetFrameLevel((btn:GetFrameLevel() or 0) + 5)
     frame:Hide()
     local function edge()
@@ -120,7 +140,7 @@ local function createAbilityButton(parent, name)
 
     local border = btn:CreateTexture(nil, "ARTWORK")
     border:SetTexture("Interface\\Buttons\\UI-Quickslot2")
-    border:SetSize(BUTTON_SIZE * 1.5, BUTTON_SIZE * 1.5)
+    border:SetSize(BUTTON_SIZE * 1.7, BUTTON_SIZE * 1.7)
     border:SetPoint("CENTER", btn, "CENTER", 0, -1)
 
     local cd = CreateFrame("Cooldown", nil, btn, "CooldownFrameTemplate")
@@ -133,32 +153,35 @@ local function createAbilityButton(parent, name)
     stanceCorner:Hide()
     btn.stanceCorner = stanceCorner
 
-    -- Soft flash: thin yellow ring, slow pulse.
-    local soft = createBorderGlow(btn, 2, 1, 0.9, 0.25, 0.7)
-    local softAg = soft:CreateAnimationGroup()
-    softAg:SetLooping("BOUNCE")
-    local softA = softAg:CreateAnimation("Alpha")
-    softA:SetFromAlpha(0.35); softA:SetToAlpha(1.0); softA:SetDuration(0.6)
-    btn.softFlash = soft
-    btn.softFlashAg = softAg
+    -- Hard flash: fallback ring (only used when Blizzard's overlay isn't available).
+    btn.hardFlash = createBorderGlow(btn, 4, 1, 0.95, 0.4, 1.0, 20)
+    btn.hardFlash.pulseFrom = 0.55
+    btn.hardFlash.pulseTo = 1.0
+    btn.hardFlash.pulsePeriod = 0.3
+    -- We intentionally do NOT pre-warm or mutate Blizzard's overlay here. Those
+    -- frames come from a single GLOBAL pool shared with every action button, so
+    -- permanently zeroing a texture on one contaminates whatever button reuses
+    -- it later (the old cause of the stuck "yellow square"). Square suppression
+    -- is done per-show on the live frame, and restored before the frame is
+    -- released, in showHardGlow/hideHardGlow below.
 
-    -- Hard flash: thicker, brighter, faster pulse.
-    local hard = createBorderGlow(btn, 3, 1, 0.95, 0.4, 1.0)
-    local hardAg = hard:CreateAnimationGroup()
-    hardAg:SetLooping("BOUNCE")
-    local hardA = hardAg:CreateAnimation("Alpha")
-    hardA:SetFromAlpha(0.55); hardA:SetToAlpha(1.0); hardA:SetDuration(0.3)
-    btn.hardFlash = hard
-    btn.hardFlashAg = hardAg
-
-    -- Transient stance-press flash: gold ring fades out once.
-    local press = createBorderGlow(btn, 4, 1, 0.85, 0.1, 1.0)
-    local pressAg = press:CreateAnimationGroup()
-    local pressA = pressAg:CreateAnimation("Alpha")
-    pressA:SetFromAlpha(1.0); pressA:SetToAlpha(0); pressA:SetDuration(1.4)
-    pressAg:SetScript("OnFinished", function() press:Hide() end)
+    -- Transient stance-press cue: a thin ring hugging the button edge that
+    -- fades once. Signals "stance changed -- your next press casts" without the
+    -- big yellow square the old wide gold ring looked like.
+    local press = createBorderGlow(btn, 2, 0.5, 0.85, 1.0, 0.9, 2)
     btn.pressFlash = press
-    btn.pressFlashAg = pressAg
+    btn.pressFlashStart = nil
+    press:SetScript("OnUpdate", function(self, elapsed)
+        if not self.pulseStart then return end
+        local t = GetTime() - self.pulseStart
+        if t >= 0.6 then
+            self:SetScript("OnUpdate", nil)
+            self.pulseStart = nil
+            self:Hide()
+            return
+        end
+        self:SetAlpha(1 - t / 0.6)
+    end)
 
     btn:SetScript("OnEnter", function(self)
         local spell = self.currentAbilityName
@@ -317,7 +340,7 @@ function AB:Build()
     -- Abilities bar (secure handler for role swap).
     local bar = CreateFrame("Frame", "HelloWarrior_AbilityBar", container, "SecureHandlerStateTemplate")
     bar:SetSize(rowWidth, abilitiesHeight)
-    bar:SetPoint("TOPLEFT", container, "TOPLEFT", 0, -(headerHeight + SECTION_GAP))
+    bar:SetPoint("TOPLEFT", container, "TOPLEFT", 0, -(headerHeight + SECTION_GAP + BUTTON_SIZE + SECTION_GAP))
     self.bar = bar
 
     -- Create one button per slot up to maxAbil.
@@ -382,7 +405,7 @@ function AB:Build()
     -- Shouts bar (no role swap; all 5 share both roles).
     local shouts = CreateFrame("Frame", "HelloWarrior_ShoutsBar", container)
     shouts:SetSize(shoutsWidth, BUTTON_SIZE)
-    shouts:SetPoint("TOP", bar, "BOTTOM", 0, -SECTION_GAP)
+    shouts:SetPoint("TOP", container, "TOP", 0, -(headerHeight + SECTION_GAP))
     self.shoutsBar = shouts
     self.shoutButtons = {}
     for i, ab in ipairs(shoutAbils) do
@@ -496,40 +519,141 @@ local function updateStanceCorner(btn)
     end
 end
 
+local function showRing(frame)
+    if frame:IsShown() then return end
+    frame:Show()
+    startPulse(frame, frame.pulseFrom, frame.pulseTo, frame.pulsePeriod)
+end
+
+local function hideRing(frame)
+    if not frame:IsShown() then return end
+    stopPulse(frame)
+    frame:Hide()
+end
+
+-- Blizzard's spell-activation overlay is a static "alert" square (texture
+-- Interface\SpellActivationOverlay\IconAlert: spark + inner/outer glow) plus the
+-- marching-ants spin (IconAlertAnts). We want the spin, not the square: on each
+-- show we zero the square textures' vertex alpha on the *live* overlay frame,
+-- and restore them before the frame goes back to the pool. The ants texture is
+-- explicitly excluded so the spinning animation is never touched.
+local SQUARE_KEY = "_hwSavedVertex"
+
+local function forEachSquareRegion(overlay, fn)
+    if not overlay or not overlay.GetRegions then return end
+    for _, region in ipairs({ overlay:GetRegions() }) do
+        if region.GetTexture then
+            local tex = region:GetTexture()
+            if type(tex) == "string" then
+                local lower = tex:lower()
+                if lower:find("spellactivationoverlay", 1, true)
+                   and not lower:find("ants", 1, true) then
+                    fn(region)
+                end
+            end
+        end
+    end
+end
+
+local function suppressOverlaySquare(overlay)
+    forEachSquareRegion(overlay, function(region)
+        -- Save-once, and never snapshot an already-suppressed (alpha 0) value,
+        -- so a missed restore can't make the contamination self-perpetuating.
+        if not region[SQUARE_KEY] then
+            local r, g, b, a = region:GetVertexColor()
+            region[SQUARE_KEY] = { r or 1, g or 1, b or 1, a or 1 }
+        end
+        region:SetVertexColor(1, 1, 1, 0)
+    end)
+end
+
+local function restoreOverlaySquare(overlay)
+    forEachSquareRegion(overlay, function(region)
+        local saved = region[SQUARE_KEY]
+        if saved then
+            region:SetVertexColor(saved[1], saved[2], saved[3], saved[4])
+            region[SQUARE_KEY] = nil
+        end
+    end)
+end
+
+-- Restore our square suppression and return the Blizzard overlay frame to the
+-- pool, clearing btn.overlay. Safe to call whenever btn.overlay is set,
+-- regardless of hardGlowOn, so a frame can never be stranded (e.g. if a show
+-- assigned btn.overlay and then errored). Restore runs on a local ref BEFORE
+-- the frame can be pooled, because OverlayGlowAnimOutFinished hides + pools +
+-- nils btn.overlay synchronously (notably on a hidden button).
+local function releaseOverlay(btn)
+    local overlay = btn.overlay
+    if not overlay then return end
+    pcall(restoreOverlaySquare, overlay)
+    if overlay.animIn and overlay.animIn:IsPlaying() then overlay.animIn:Stop() end
+    if overlay.animOut and overlay.animOut:IsPlaying() then overlay.animOut:Stop() end
+    -- OverlayGlowAnimOutFinished is the only path that hides the frame, returns
+    -- it to the pool and clears btn.overlay, so the next show acquires a clean
+    -- frame and animates fresh. (The fade-out is skipped; the glow snaps off,
+    -- which is deterministic under the 0.1s ticker.)
+    if ActionButton_OverlayGlowAnimOutFinished and overlay.animOut then
+        pcall(ActionButton_OverlayGlowAnimOutFinished, overlay.animOut)
+    else
+        -- Not expected on Classic Era 1.15.x (the finisher ships alongside
+        -- Show/Hide). Blizzard's pool is private, so just drop our ref and let
+        -- the next show acquire a fresh frame.
+        overlay:Hide()
+        btn.overlay = nil
+    end
+end
+
+-- ActionButton_ShowOverlayGlow reparents a pooled frame onto our button from an
+-- insecure path (the ticker / shapeshift handler). This is the same call every
+-- default action button makes, and it never touches our secure cast attributes
+-- (type/macrotext), so click-to-cast stays secure; accepted tradeoff for using
+-- Blizzard's native animated glow.
 local function showHardGlow(btn)
+    -- Reconcile stale intent: if Blizzard reclaimed the pooled frame out from
+    -- under us, btn.overlay is nil while hardGlowOn still says "overlay". Clear
+    -- it so the guard below can't permanently block re-showing the glow.
+    if btn.hardGlowOn == "overlay" and not btn.overlay then
+        btn.hardGlowOn = nil
+    end
     if btn.hardGlowOn then return end
     if ActionButton_ShowOverlayGlow then
         local ok = pcall(ActionButton_ShowOverlayGlow, btn)
-        if ok then btn.hardGlowOn = "overlay"; return end
+        if ok and btn.overlay then
+            suppressOverlaySquare(btn.overlay)
+            btn.hardGlowOn = "overlay"
+            return
+        end
+        -- ShowOverlayGlow can assign btn.overlay and THEN error; release that
+        -- partial frame so it can't dangle (unsuppressed) behind the ring.
+        releaseOverlay(btn)
     end
-    if not btn.hardFlashAg:IsPlaying() then
-        btn.hardFlash:Show(); btn.hardFlashAg:Play()
-    end
+    showRing(btn.hardFlash)
     btn.hardGlowOn = "fallback"
 end
 
 local function hideHardGlow(btn)
-    if not btn.hardGlowOn then return end
-    if btn.hardGlowOn == "overlay" and ActionButton_HideOverlayGlow then
-        pcall(ActionButton_HideOverlayGlow, btn)
-    else
-        btn.hardFlash:Hide(); btn.hardFlashAg:Stop()
+    if not btn.hardGlowOn and not btn.overlay then return end
+    -- Tear the fallback ring down if it's up...
+    if btn.hardGlowOn == "fallback" then
+        hideRing(btn.hardFlash)
     end
+    -- ...and ALWAYS release any overlay frame we hold, even in fallback mode: a
+    -- failed show can leave btn.overlay set while hardGlowOn=="fallback", and
+    -- that frame must never be left shown/un-pooled.
+    releaseOverlay(btn)
     btn.hardGlowOn = nil
 end
 
 local function applyFlash(btn, flash)
-    if flash.hard then
-        btn.softFlash:Hide(); btn.softFlashAg:Stop()
+    -- Only glow buttons that are actually on screen. Secure role/stance swaps
+    -- :Hide() buttons without routing through here; gating on IsVisible means
+    -- the next tick tears the glow down (restoring + pooling the frame) for any
+    -- button that became hidden, rather than stranding a suppressed frame.
+    if flash.hard and btn:IsVisible() then
         showHardGlow(btn)
-    elseif flash.soft then
-        hideHardGlow(btn)
-        if not btn.softFlashAg:IsPlaying() then
-            btn.softFlash:Show(); btn.softFlashAg:Play()
-        end
     else
         hideHardGlow(btn)
-        btn.softFlash:Hide(); btn.softFlashAg:Stop()
     end
 end
 
@@ -551,12 +675,15 @@ function AB:Tick()
         end
     end
 
-    -- Shouts: cooldown + rage tint only, no flash.
+    -- Shouts: cooldown + rage tint + optional maintenance flash (e.g. Battle Shout).
     for _, btn in ipairs(self.shoutButtons or {}) do
         local ab = btn.currentAbility
         if ab and GetSpellInfo(ab.name) then
             updateCooldown(btn, ab.name)
             updateRageTint(btn, ab.name)
+            applyFlash(btn, flashResults[ab.name] or {})
+        else
+            applyFlash(btn, {})
         end
     end
 end
@@ -575,63 +702,16 @@ local function maybePressFlash()
                 local matches = stanceMatches(ab.stance)
                 local wasInWrongStance = (btn.lastClickStance or 0) ~= newStance
                 if matches and wasInWrongStance then
-                    if not btn.pressFlashAg:IsPlaying() then
+                    if not btn.pressFlash.pulseStart then
+                        btn.pressFlash:SetAlpha(1)
                         btn.pressFlash:Show()
-                        btn.pressFlashAg:Play()
+                        btn.pressFlash.pulseStart = GetTime()
                     end
                 end
             end
             btn.lastClickAt = nil
         end
     end
-end
-
-function AB:SetRole(role)
-    if role ~= "tank" and role ~= "dps" then return end
-    if InCombatLockdown() then
-        print("|cffc79c6eHelloWarrior|r can't change role in combat — use the toggle or Alt overlay.")
-        return
-    end
-    if not self.bar then return end
-    HelloWarriorCharDB.role = role
-    self.bar:SetAttribute("baseRole", role)
-    self.bar:Execute([[ self:RunAttribute("UpdateRole") ]])
-    ns.RoleToggle:Refresh()
-    print("|cffc79c6eHelloWarrior|r role: " .. role)
-end
-
-function AB:ToggleRole()
-    local cur = HelloWarriorCharDB.role or "dps"
-    self:SetRole(cur == "tank" and "dps" or "tank")
-end
-
--- Pick a role from the talent tree breakdown. Prot leading (and non-zero) =
--- tank; anything else = dps. Tabs: 1 = Arms, 2 = Fury, 3 = Protection.
--- With dual spec, GetTalentTabInfo without a group argument can race the
--- swap, so explicitly pass the active talent group.
-local function detectRoleFromTalents()
-    if not GetTalentTabInfo then return nil end
-    local group = GetActiveTalentGroup and GetActiveTalentGroup() or nil
-    local function pointsIn(tab)
-        local _, _, p = GetTalentTabInfo(tab, false, false, group)
-        return p or 0
-    end
-    local arms, fury, prot = pointsIn(1), pointsIn(2), pointsIn(3)
-    if prot > 0 and prot >= arms and prot >= fury then return "tank" end
-    return "dps"
-end
-
-function AB:DetectAndApplyRole()
-    if not GetTalentTabInfo then return end
-    local group = GetActiveTalentGroup and GetActiveTalentGroup() or nil
-    local function pointsIn(tab)
-        local _, _, _, _, pts = GetTalentTabInfo(tab, false, false, group)
-        return tonumber(pts) or 0
-    end
-    local _, _, prot = pointsIn(1), pointsIn(2), pointsIn(3)
-    local detected = (prot > 0) and "tank" or "dps"
-    if detected == HelloWarriorCharDB.role then return end
-    self:SetRole(detected)
 end
 
 function AB:RefreshLayout()
@@ -661,12 +741,6 @@ ns:On("PLAYER_LOGIN", function()
 end)
 ns:On("SPELLS_CHANGED",      function() AB:RefreshLayout() end)
 ns:On("PLAYER_REGEN_ENABLED", function() AB:RefreshLayout(); AB:ApplyBlizzardBars() end)
-local function scheduleDetect()
-    C_Timer.After(0.4, function() AB:DetectAndApplyRole() end)
-end
-ns:On("PLAYER_TALENT_UPDATE",        scheduleDetect)
-ns:On("CHARACTER_POINTS_CHANGED",    scheduleDetect)
-ns:On("ACTIVE_TALENT_GROUP_CHANGED", scheduleDetect)
 ns:On("PLAYER_ENTERING_WORLD",       function() AB:ApplyBlizzardBars() end)
 ns:On("UPDATE_SHAPESHIFT_FORM", function()
     maybePressFlash()

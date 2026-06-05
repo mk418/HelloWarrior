@@ -64,11 +64,6 @@ local function rageAfterSwitch()
     return math.min(cur, tacMasteryRank * 5)
 end
 
-local function rageAvailableFor(ability)
-    if stanceMatches(ability) then return UnitPower("player", RAGE_POWER_TYPE) end
-    return rageAfterSwitch()
-end
-
 local function isOffCooldown(spellName)
     local start, duration = GetSpellCooldown(spellName)
     if not start or not duration then return true end
@@ -128,6 +123,13 @@ local function evaluateFlash(ability)
         return (UnitHealth("target") / mx) * 100 < (rule.lt or 0)
     elseif t == "nodebuff" then
         return targetDebuffStacks(rule.spell) < (rule.stacks or 1)
+    elseif t == "nobuff" then
+        for i = 1, 40 do
+            local n = UnitBuff("player", i)
+            if not n then break end
+            if n == rule.buff then return false end
+        end
+        return true
     end
     return false
 end
@@ -186,6 +188,14 @@ function Helper:Compute(role)
         end
         results[ab.name] = r
     end
+
+    -- Shouts: evaluated independently of role priority.
+    for _, ab in ipairs(ns.Abilities.shouts) do
+        if ab.flash and evaluateFlash(ab) then
+            results[ab.name] = { soft = true, hard = true }
+        end
+    end
+
     return results
 end
 
