@@ -103,10 +103,15 @@ local function resolvePriority(ability)
     return ability.prio
 end
 
+local function shieldEquipped()
+    return IsEquippedItemType and IsEquippedItemType("Shields") or false
+end
+
 local function evaluateFlash(ability)
     local rule = ability.flash
     if not rule then return false end
     if not GetSpellInfo(ability.name) then return false end  -- not learned
+    if ability.requiresShield and not shieldEquipped() then return false end
 
     local t = rule.type
     if t == "off_cd" then
@@ -156,7 +161,7 @@ function Helper:Compute(role)
     local topRuleMet, topRuleMetPrio = nil, math.huge
 
     for _, ab in ipairs(list) do
-        if ab.flash and ab.flash.type ~= "helper" and evaluateFlash(ab) then
+        if ab.flash and ab.flash.type ~= "helper" and not ab.flash.independent and evaluateFlash(ab) then
             local p = resolvePriority(ab) or math.huge
             if p < topRuleMetPrio then
                 topRuleMet, topRuleMetPrio = ab, p
@@ -182,6 +187,12 @@ function Helper:Compute(role)
         if ab.flash and ab.flash.type == "helper" then
             r.soft = bloodrageFlash
             r.hard = bloodrageFlash
+        elseif ab.flash and ab.flash.independent then
+            -- Off-GCD "press whenever ready" flash, outside the priority queue,
+            -- but only when you can actually afford it.
+            local on = evaluateFlash(ab) and isAffordable(ab)
+            r.soft = on
+            r.hard = on
         elseif affordableFlashing[ab.name] then
             r.soft = true
             r.hard = (ab == optimalAffordable)

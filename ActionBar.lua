@@ -5,7 +5,7 @@ local AB = ns.ActionBar
 
 local BUTTON_SIZE = 36
 local BUTTON_GAP = 4
-local ABILITIES_PER_ROW = 8
+local ABILITIES_PER_ROW = 7
 local ROW_GAP = 4
 local SECTION_GAP = 10
 
@@ -54,20 +54,21 @@ local function stanceMatches(stance)
     return false
 end
 
--- DPS "hold Ctrl to switch to Berserker" applies to abilities usable in
--- Berserker that the macro doesn't already force there: "any"-stance abilities,
--- and multi-stance abilities that include Berserker. Berserker-only abilities
--- already dance there; battle/defensive-only ones can't be used in Berserker,
--- so Ctrl must not yank you out of the stance they need.
-local function isBerserkerSwitchable(ability)
+-- True when a preferred-stance switch should be PREPENDED so `ability` dances
+-- into `stanceName`: "any"-stance abilities (the macro otherwise adds no switch)
+-- and multi-stance abilities that include stanceName alongside another stance
+-- (so we can prefer it even from the other valid stance). Single-stance
+-- abilities already dance into their own stance; abilities that can't be used in
+-- stanceName at all are left alone, so we never pull them out of a needed stance.
+local function canSwitchTo(ability, stanceName)
     local s = ability.stance
     if s == nil or s == "any" then return true end
     if type(s) == "table" then
-        local hasBerserker, hasOther = false, false
+        local hasIt, hasOther = false, false
         for _, v in ipairs(s) do
-            if v == "berserker" then hasBerserker = true else hasOther = true end
+            if v == stanceName then hasIt = true else hasOther = true end
         end
-        return hasBerserker and hasOther
+        return hasIt and hasOther
     end
     return false
 end
@@ -76,16 +77,47 @@ local CTRL_BERSERKER_SWITCH = ("/cast [mod:ctrl,nostance:%d] %s"):format(
     ns.Abilities.STANCE_ID.berserker,
     ns.Abilities.STANCE_SPELL[ns.Abilities.STANCE_ID.berserker])
 
+local DEFENSIVE_SWITCH = ("/cast [nostance:%d] %s"):format(
+    ns.Abilities.STANCE_ID.defensive,
+    ns.Abilities.STANCE_SPELL[ns.Abilities.STANCE_ID.defensive])
+
+-- Pre-built /cancelaura blocks per role. Folded into every ability macro so
+-- using an ability strips unwanted buffs -- but only out of combat: [nocombat]
+-- makes each line a clean no-op in combat (Blizzard blocks buff-cancel there),
+-- so the strip effectively happens on out-of-combat presses (opener / between
+-- pulls). Tank also drops the Salvation threat-reducers.
+local CANCEL_BY_ROLE = {}
+do
+    local function block(role)
+        local lines = {}
+        for _, name in ipairs(ns.Abilities.unwantedBuffs.both) do
+            lines[#lines + 1] = "/cancelaura [nocombat] " .. name
+        end
+        if role == "tank" then
+            for _, name in ipairs(ns.Abilities.unwantedBuffs.tank) do
+                lines[#lines + 1] = "/cancelaura [nocombat] " .. name
+            end
+        end
+        return lines
+    end
+    CANCEL_BY_ROLE.tank = block("tank")
+    CANCEL_BY_ROLE.dps = block("dps")
+end
+
 local function buildMacro(ability, role)
     local lines = { "#showtooltip " .. ability.name }
     if ability.combo then
         table.insert(lines, ("/use [mod:%s] %s"):format(ability.combo.modifier, ability.combo.use))
     end
-    -- DPS: hold Ctrl to dance into Berserker first. The player holds it only
-    -- when rage is low enough that the switch is free -- the secure button
-    -- can't read rage itself, so that judgement stays with them.
-    if role == "dps" and isBerserkerSwitchable(ability) then
+    -- Prefer your role's home stance for abilities that can use it. DPS: hold
+    -- Ctrl to dance into Berserker (opt-in, since the switch can dump rage and a
+    -- secure button can't read rage to decide). Tank: always dance into
+    -- Defensive -- tanks want to be there, and the switch only fires when you're
+    -- not already in Defensive (i.e. returning from a Battle/Berserker dip).
+    if role == "dps" and canSwitchTo(ability, "berserker") then
         table.insert(lines, CTRL_BERSERKER_SWITCH)
+    elseif role == "tank" and canSwitchTo(ability, "defensive") then
+        table.insert(lines, DEFENSIVE_SWITCH)
     end
     if not ability.stance or ability.stance == "any" then
         table.insert(lines, "/cast " .. ability.name)
@@ -99,6 +131,14 @@ local function buildMacro(ability, role)
     end
     if not ability.noStartAttack then
         table.insert(lines, "/startattack")
+    end
+    -- Strip unwanted buffs as a side-effect of the press (out of combat only).
+    -- Role-aware; shouts and the ranged button pass no role and are untouched.
+    local cancels = role and CANCEL_BY_ROLE[role]
+    if cancels then
+        for _, line in ipairs(cancels) do
+            table.insert(lines, line)
+        end
     end
     return table.concat(lines, "\n")
 end
@@ -430,7 +470,6 @@ function AB:Build()
         local mod = self:GetAttribute("modActive") == "1"
         local effective = base
         if mod then effective = (base == "tank") and "dps" or "tank" end
-        self:SetAttribute("effectiveRole", effective)
         local count = self:GetAttribute("btnCount") or 0
         for i = 1, count do
             local b = self:GetFrameRef("btn" .. i)
@@ -444,6 +483,9 @@ function AB:Build()
                 end
             end
         end
+        -- Set effectiveRole LAST: the insecure OnAttributeChanged hook it fires
+        -- (-> OnRoleApplied -> Relayout) must see the settled Show/Hide state.
+        self:SetAttribute("effectiveRole", effective)
     ]])
 
     bar:SetAttribute("_onstate-mod", [[
@@ -574,7 +616,86 @@ function AB:OnRoleApplied(role)
         local ab = (role == "tank") and btn.tankAbility or btn.dpsAbility
         applyAbilityToButton(btn, ab)
     end
+    self:Relayout()
     self:Tick()
+end
+
+-- Place `btns` left-to-right from xStart, anchored to `parent`.
+local function placeRow(btns, parent, xStart, y)
+    for i, btn in ipairs(btns) do
+        btn:ClearAllPoints()
+        btn:SetPoint("TOPLEFT", parent, "TOPLEFT",
+            xStart + (i - 1) * (BUTTON_SIZE + BUTTON_GAP), y)
+    end
+end
+
+local function rowSpan(n)
+    if n <= 0 then return 0 end
+    return n * BUTTON_SIZE + (n - 1) * BUTTON_GAP
+end
+
+-- Collapse the gaps left by hidden buttons and centre each (partial) row. These
+-- are secure buttons, so SetPoint is illegal in combat: this no-ops during
+-- combat and re-runs on the next role/talent change or PLAYER_REGEN_ENABLED.
+function AB:Relayout()
+    if InCombatLockdown() then return end
+
+    -- Ability grid. DPS auto-wraps at ABILITIES_PER_ROW; tank uses explicit rows
+    -- (A.tankRows) so its row breaks are fixed regardless of which talents show.
+    if self.buttons and self.bar then
+        local fullWidth = rowSpan(ABILITIES_PER_ROW)
+        local rowIdx = 0
+        local function emit(row)
+            if #row > 0 then
+                placeRow(row, self.bar, (fullWidth - rowSpan(#row)) / 2,
+                    -rowIdx * (BUTTON_SIZE + ROW_GAP))
+                rowIdx = rowIdx + 1
+            end
+        end
+        local role = self.bar:GetAttribute("effectiveRole") or HelloWarriorCharDB.role or "dps"
+        local explicit = (role == "tank") and ns.Abilities.tankRows or nil
+        if explicit then
+            -- Each defined row collapses its own hidden buttons and centres the rest.
+            local dataIdx = 1
+            for _, size in ipairs(explicit) do
+                local row = {}
+                for k = dataIdx, dataIdx + size - 1 do
+                    local b = self.buttons[k]
+                    if b and b:IsShown() then row[#row + 1] = b end
+                end
+                emit(row)
+                dataIdx = dataIdx + size
+            end
+        else
+            local vis = {}
+            for _, b in ipairs(self.buttons) do
+                if b:IsShown() then vis[#vis + 1] = b end
+            end
+            local i = 1
+            while i <= #vis do
+                local n = math.min(ABILITIES_PER_ROW, #vis - i + 1)
+                local row = {}
+                for c = 0, n - 1 do row[c + 1] = vis[i + c] end
+                emit(row)
+                i = i + n
+            end
+        end
+    end
+
+    -- Shouts row: ranged button + visible shouts, centred in the shouts bar.
+    if self.shoutsBar then
+        local vis = {}
+        if self.rangedButton and self.rangedButton:IsShown() then
+            vis[#vis + 1] = self.rangedButton
+        end
+        for _, b in ipairs(self.shoutButtons or {}) do
+            if b:IsShown() then vis[#vis + 1] = b end
+        end
+        if #vis > 0 then
+            placeRow(vis, self.shoutsBar,
+                (self.shoutsBar:GetWidth() - rowSpan(#vis)) / 2, 0)
+        end
+    end
 end
 
 local function updateCooldown(btn, spellName)
@@ -826,6 +947,7 @@ function AB:RefreshLayout()
         end
     end
     self.bar:Execute([[ self:RunAttribute("UpdateRole") ]])
+    self:Relayout()
 end
 
 ns:On("PLAYER_LOGIN", function()
