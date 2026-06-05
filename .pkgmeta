@@ -1,0 +1,20 @@
+# BigWigs packager config. Used by the CurseForge / WowInterface
+# release-builder GitHub Action and by `release.sh` runs locally.
+
+package-as: HelloWarrior
+
+# Files that should NOT end up in the released zip. The packager
+# already excludes hidden files by default, but listing key items
+# explicitly avoids surprises.
+ignore:
+    - .gitignore
+    - .pkgmeta
+    - .github
+    - DESIGN.md
+    - README.md
+
+# Generate a -nolib variant of the zip in case libs ever get embedded.
+enable-nolib-creation: yes
+
+# No `manual-changelog` block: the packager auto-generates the
+# changelog from git commit messages between tags.

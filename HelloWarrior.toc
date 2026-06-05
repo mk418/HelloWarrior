@@ -1,0 +1,15 @@
+## Interface: 11508
+## Title: HelloWarrior
+## Notes: Lean, opinionated ability manager for Warrior
+## Author: Drikk
+## Version: 0.1.0
+## SavedVariables: HelloWarriorDB
+## SavedVariablesPerCharacter: HelloWarriorCharDB
+
+Core.lua
+Config.lua
+Abilities.lua
+Helper.lua
+StanceIndicator.lua
+RoleToggle.lua
+ActionBar.lua
