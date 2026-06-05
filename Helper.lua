@@ -134,6 +134,25 @@ local function playerBuffRemaining(buffName)
     return nil
 end
 
+-- True when the current (attackable) target is mid-cast/channel and it's
+-- interruptible. `notInterruptible` sits at a DIFFERENT position per API on
+-- Classic Era 1.15.x -- 8th return for UnitCastingInfo (after castID), 7th for
+-- UnitChannelInfo (channels have no castID) -- so the two are read separately.
+-- The flag is effectively always nil for hostile NPC casts on 1.15.x, so this
+-- fails OPEN (any target cast counts as interruptible) -- the right vanilla
+-- default; we still honour an explicit `true` ("skip"). Note UnitChannelInfo
+-- returns nil for non-player units on 1.15.x, so target channels may not detect.
+local function targetCastingInterruptible()
+    if not UnitExists("target") or not UnitCanAttack("player", "target") then
+        return false
+    end
+    local castName, _, _, _, _, _, _, castNotInterruptible = UnitCastingInfo("target")
+    if castName then return not castNotInterruptible end
+    local chanName, _, _, _, _, _, chanNotInterruptible = UnitChannelInfo("target")
+    if chanName then return not chanNotInterruptible end
+    return false
+end
+
 local function evaluateFlash(ability)
     local rule = ability.flash
     if not rule then return false end
@@ -162,6 +181,12 @@ local function evaluateFlash(ability)
         if remaining == nil then return true end
         if rule.refresh then return remaining <= rule.refresh end
         return false
+    elseif t == "interrupt" then
+        -- Flash only while the target is mid-interruptible-cast AND the interrupt
+        -- is actually ready. The off-cooldown gate matters because these spells
+        -- cost no rage the engine sees (isAffordable is trivially true), so the
+        -- independent-flash path would otherwise light up mid-cooldown.
+        return targetCastingInterruptible() and isOffCooldown(ability.name)
     end
     return false
 end

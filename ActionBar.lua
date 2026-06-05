@@ -1132,3 +1132,18 @@ ns:On("PLAYER_TARGET_CHANGED", function() AB:Tick() end)
 -- or is cancelled -- refresh the queued-glow immediately instead of waiting for
 -- the 0.1s ticker.
 ns:On("CURRENT_SPELL_CAST_CHANGED", function() AB:Tick() end)
+-- Interrupt alert: snap the Pummel/Shield Bash flash on/off when the target
+-- starts/stops a cast or channel. These events are unreliable for unit=="target"
+-- on Classic Era, so they're only low-latency hints -- the 0.1s ticker polling
+-- UnitCastingInfo("target") is the source of truth (and PLAYER_TARGET_CHANGED
+-- above catches switching to a target already mid-cast).
+local function onTargetCast(unit)
+    if unit == "target" then AB:Tick() end
+end
+for _, e in ipairs({
+    "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_CHANNEL_START",
+    "UNIT_SPELLCAST_STOP", "UNIT_SPELLCAST_CHANNEL_STOP",
+    "UNIT_SPELLCAST_INTERRUPTED", "UNIT_SPELLCAST_SUCCEEDED",
+}) do
+    ns:On(e, onTargetCast)
+end

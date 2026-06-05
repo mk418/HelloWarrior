@@ -26,6 +26,9 @@ A.WORLD_BUFFS = {
 --   { type = "helper" }                                  Bloodrage; flashed by the rage-helper engine
 --   { type = "off_cd", independent = true }              flashes on its own, OUTSIDE the priority queue
 --                                                         (an off-GCD button you press whenever it's ready, e.g. Shield Block)
+--   { type = "interrupt", independent = true }           flashes (independent, like above) when the TARGET is
+--                                                         casting/channeling an interruptible spell AND the
+--                                                         interrupt is off cooldown (Pummel / Shield Bash)
 --
 -- `prio` (lower = higher priority). Blank prio → soft-flash only, never "optimal".
 -- `prio_when` overrides prio when all listed buffs are present on the player.
@@ -108,7 +111,8 @@ A.tank = {
     { name = "Taunt",          stance = "defensive" },
     { name = "Mocking Blow",   stance = "battle" },
     -- Row 2.
-    { name = "Shield Bash",    stance = { "defensive", "battle" } },
+    { name = "Shield Bash",    stance = { "defensive", "battle" }, requiresShield = true,
+      flash = { type = "interrupt", independent = true } },
     { name = "Death Wish",     stance = "any", talentOnly = true, noStartAttack = true },
     { name = "Berserker Rage", stance = "berserker", noStartAttack = true },
     { name = "Disarm",         stance = "defensive" },
@@ -149,7 +153,8 @@ A.dps = {
     { name = "Heroic Strike",  stance = "any",       onNextSwing = true, flash = { type = "rage", threshold = 50 }, prio = 5 },
     { name = "Cleave",         stance = "any", onNextSwing = true },
     -- Utility / cooldowns.
-    { name = "Pummel",         stance = "berserker" },
+    { name = "Pummel",         stance = "berserker",
+      flash = { type = "interrupt", independent = true } },
     { name = "Death Wish",     stance = "any", talentOnly = true, noStartAttack = true },
     { name = "Berserker Rage", stance = "berserker", noStartAttack = true },
     { name = "Disarm",         stance = "defensive" },

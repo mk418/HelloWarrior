@@ -65,6 +65,8 @@ read_globals = {
     -- Spell / ability info
     "GetSpellInfo",
     "GetSpellCooldown",
+    "UnitCastingInfo",
+    "UnitChannelInfo",
     "GetSpellPowerCost",
     "IsUsableSpell",
     "IsCurrentSpell",
