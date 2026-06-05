@@ -53,7 +53,7 @@ A lean, opinionated ability manager for World of Warcraft Classic Era Warriors. 
 - **Swing timer** — main-hand, fills toward the next swing, hitbox-driven from the combat log (`SWING_*` plus the `SPELL_*` events for Heroic Strike / Cleave / Slam, which replace the white swing), rescaled on haste changes, with a seconds readout.
 - **Rage bar** — current rage with a number, stacked with the swing timer in the header; throbs from red toward a hot warning colour at ≥80% rage in combat (the **rage-cap warning**), and **Heroic Strike / Cleave light up** at the same threshold so you dump the excess into them before it wastes. One shared trigger (`Helper:IsRageCapping`) fires both.
 - **Melee-range indicator** — green `MELEE` / gold `CHARGE` / red `OUT`, hitbox-aware via `IsSpellInRange` of a real targeted melee ability; blank with no target.
-- **Per-button out-of-range red tint**, GCD + cooldown sweeps, **queued-on-next-swing** autocast shine on Heroic Strike / Cleave, **active-stance** shine, rage/usability icon tint, stance-requirement corner badges.
+- **Per-button out-of-range red tint**, GCD + cooldown sweeps, **queued-on-next-swing** autocast shine on Heroic Strike / Cleave, **active-stance** shine, rage/usability icon tint, stance-requirement corner badges, and a **Sunder Armor readout** — a big stack count centred on the button in WoW's cooldown-timer typeface (Friz Quadrata, outlined) (colour-coded red→yellow→green toward the 5-stack cap), with the button's **cooldown sweep driven by the Sunder debuff's remaining time** so you watch it run out and see when it's about to drop off. (Numeric cooldown countdowns are suppressed on the addon's buttons — Blizzard's built-in via `SetHideCountdownNumbers`, and OmniCC / tullaCC via the `noCooldownCount` flag they read on the cooldown frame — so the radial sweep and the centred count are the only things there.)
 
 **Controls**
 - Addon-managed, **position-following keybindings** (override `CLICK` bindings remapped to whatever button sits in each on-screen slot), with a hover-and-press editor (`/hw keys`); disabled while the bars are hidden.
@@ -108,7 +108,6 @@ Reactive combat cues:
 
 Maintenance tracking (extends the Sunder / Battle Shout upkeep flashes):
 - **Debuff upkeep flashes** — Thunder Clap (attack-speed slow), Demoralizing Shout (AP reduction), Rend — flash when missing/expiring on the target.
-- **Sunder stack readout** — show `3/5` on the Sunder button, not just the flash.
 
 Tank:
 - **Defensive prompt** — when health drops low, surface Shield Wall / Last Stand.

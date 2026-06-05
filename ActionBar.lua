@@ -280,6 +280,15 @@ local function createAbilityButton(parent, name)
 
     local cd = CreateFrame("Cooldown", nil, btn, "CooldownFrameTemplate")
     cd:SetAllPoints(icon)
+    -- The radial sweep IS our cooldown/timer visual; suppress every numeric
+    -- countdown so it never collides with the centred stack readout (and the
+    -- Sunder debuff-timer sweep below reuses this frame). SetHideCountdownNumbers
+    -- stops Blizzard's own built-in number; noCooldownCount is the Tuller
+    -- convention that makes OmniCC / tullaCC skip this Cooldown frame -- they read
+    -- it (on the frame) inside their SetCooldown hook, so set it once here, before
+    -- any SetCooldown call. Both are needed: they're independent channels.
+    if cd.SetHideCountdownNumbers then cd:SetHideCountdownNumbers(true) end
+    cd.noCooldownCount = true
     btn.cooldown = cd
     -- Last (start, duration) pushed to the cooldown frame; 0,0 == cleared. The
     -- Tick guard compares against these to skip redundant SetCooldown churn.
@@ -290,6 +299,20 @@ local function createAbilityButton(parent, name)
     stanceCorner:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", 1, -1)
     stanceCorner:Hide()
     btn.stanceCorner = stanceCorner
+
+    -- Stack readout (e.g. Sunder Armor): a big number centred on the button in
+    -- the same Friz Quadrata typeface WoW's cooldown-timer numbers use -- take
+    -- that font's path from the GameFontNormal template and apply a normal
+    -- OUTLINE at 22 (the "Huge" number face looked off because of its THICK
+    -- outline at size 30, not the typeface itself). Just the count, since
+    -- warriors know the 5-stack cap. Driven in AB:Tick for any ability with a
+    -- stacking `nodebuff` flash; hidden otherwise.
+    local stackText = btn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local fontPath = stackText:GetFont()
+    if fontPath then stackText:SetFont(fontPath, 22, "OUTLINE") end
+    stackText:SetPoint("CENTER", btn, "CENTER", 0, 0)
+    stackText:Hide()
+    btn.stackText = stackText
 
     -- "Queued on next swing" cue (Heroic Strike / Cleave waiting for the next
     -- melee swing): the shared pet-autocast spinning shine, toggled in AB:Tick.
@@ -914,13 +937,11 @@ local function clearCooldown(btn)
     end
 end
 
-local function updateCooldown(btn, spellName)
-    local start, duration = GetSpellCooldown(spellName)
-    -- Show EVERY cooldown, including the 1.5s GCD, so the buttons sweep together
-    -- like the default action bars (the old `duration > 1.5` guard filtered the
-    -- GCD out, which is why there was no GCD animation). SetCooldown is keyed off
-    -- the absolute start time, so re-calling it each 0.1s tick with unchanged
-    -- values doesn't restart the sweep; we still guard to avoid needless churn.
+-- Push (start, duration) to the sweep, guarded against redundant churn.
+-- SetCooldown is keyed off the absolute start time, so re-calling it each 0.1s
+-- tick with unchanged values doesn't restart the sweep; the guard just avoids
+-- the needless call.
+local function setCooldownGuarded(btn, start, duration)
     if start and duration and start > 0 and duration > 0 then
         if btn._cdStart ~= start or btn._cdDuration ~= duration then
             btn.cooldown:SetCooldown(start, duration)
@@ -929,6 +950,32 @@ local function updateCooldown(btn, spellName)
     else
         clearCooldown(btn)
     end
+end
+
+local function updateCooldown(btn, spellName)
+    -- Show EVERY cooldown, including the 1.5s GCD, so the buttons sweep together
+    -- like the default action bars (the old `duration > 1.5` guard filtered the
+    -- GCD out, which is why there was no GCD animation).
+    setCooldownGuarded(btn, GetSpellCooldown(spellName))
+end
+
+-- Cooldown sweep for an ability button. For an ability that tracks a target
+-- debuff (a `nodebuff` flash, e.g. Sunder Armor), show that debuff's REMAINING
+-- duration as the sweep -- so the button visibly "runs out" as the debuff ticks
+-- toward dropping off, and the sweep clears the instant it falls. When the
+-- debuff isn't up (or there's no target), fall back to the spell's own
+-- cooldown/GCD. The GCD sweep is visible on every other button anyway, so
+-- ceding this one's GCD to the more useful debuff timer is a fair trade.
+local function updateButtonCooldown(btn, ab)
+    local f = ab.flash
+    if f and f.type == "nodebuff" and f.spell then
+        local start, duration = ns.Helper:TargetDebuffTimer(f.spell)
+        if start and duration then
+            setCooldownGuarded(btn, start, duration)
+            return
+        end
+    end
+    updateCooldown(btn, ab.name)
 end
 
 -- Resolve once: bare global on 1.15.x, C_Spell on newer-API clients (the latter
@@ -1113,6 +1160,34 @@ local function applyFlash(btn, flash)
     end
 end
 
+-- Stack readout for an ability whose flash is a STACKING nodebuff (Sunder Armor:
+-- "3/5"). Reads the same player-applied count the flash uses, so the number and
+-- the glow agree. Colour-codes status: red at 0 (start stacking), yellow while
+-- building, green at the cap (stop -- the flash is already off there). Hidden
+-- when the ability isn't a stacking nodebuff, or with no attackable target.
+local function updateStackReadout(btn, ab)
+    local t = btn.stackText
+    if not t then return end
+    local f = ab and ab.flash
+    if not (f and f.type == "nodebuff" and f.spell and (f.stacks or 1) > 1)
+        or not UnitExists("target") or UnitIsDead("target")
+        or not UnitCanAttack("player", "target") then
+        t:Hide()
+        return
+    end
+    local maxStacks = f.stacks
+    local n = ns.Helper:TargetDebuffStacks(f.spell)
+    t:SetText(tostring(n))
+    if n >= maxStacks then
+        t:SetTextColor(0.4, 1.0, 0.4)   -- capped: green
+    elseif n == 0 then
+        t:SetTextColor(1.0, 0.5, 0.5)   -- none yet: red
+    else
+        t:SetTextColor(1.0, 0.85, 0.3)  -- building: yellow
+    end
+    t:Show()
+end
+
 function AB:Tick()
     if not self.buttons then return end
     local role = self.bar and self.bar:GetAttribute("effectiveRole") or HelloWarriorCharDB.role or "dps"
@@ -1121,13 +1196,15 @@ function AB:Tick()
     for _, btn in ipairs(self.buttons) do
         local ab = btn.currentAbility
         if ab and GetSpellInfo(ab.name) then
-            updateCooldown(btn, ab.name)
+            updateButtonCooldown(btn, ab)
             updateRageTint(btn, ab.name)
             updateStanceCorner(btn)
+            updateStackReadout(btn, ab)
             applyFlash(btn, flashResults[ab.name] or {})
             ns:SetShine(btn, ab.onNextSwing and isQueued(ab.name), 0.45, 0.8, 1.0)
         else
             clearCooldown(btn)
+            if btn.stackText then btn.stackText:Hide() end
             applyFlash(btn, {})
             ns:SetShine(btn, false)
         end

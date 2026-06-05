@@ -94,6 +94,34 @@ local function targetDebuffStacks(spellName)
     return 0
 end
 
+-- Public accessor for the same player-applied debuff-stack count the nodebuff
+-- flash uses, so the on-button stack readout (e.g. Sunder) stays in lockstep
+-- with the flash it sits next to.
+function Helper:TargetDebuffStacks(spellName)
+    return targetDebuffStacks(spellName)
+end
+
+-- (start, duration) of a player-applied debuff on the target, for driving the
+-- button's cooldown sweep as a "time until it drops off" timer (Sunder Armor).
+-- Returns nil when the debuff is absent or has no running duration. Reads the
+-- NAMED C_UnitAuras fields (.expirationTime/.duration) -- the positional
+-- UnitDebuff tuple is ambiguous on 1.15.x (see playerBuffRemaining). start is in
+-- the GetTime() base, exactly what Cooldown:SetCooldown(start, duration) wants.
+local GetTargetAuraByIndex = C_UnitAuras and C_UnitAuras.GetAuraDataByIndex
+function Helper:TargetDebuffTimer(spellName)
+    if not UnitExists("target") or not GetTargetAuraByIndex then return nil end
+    for i = 1, 40 do
+        local aura = GetTargetAuraByIndex("target", i, "HARMFUL|PLAYER")
+        if not aura then break end
+        if aura.name == spellName then
+            local exp, dur = aura.expirationTime, aura.duration
+            if exp and dur and dur > 0 then return exp - dur, dur end
+            return nil
+        end
+    end
+    return nil
+end
+
 local function resolvePriority(ability)
     if ability.prio_when then
         for _, override in ipairs(ability.prio_when) do
@@ -173,6 +201,11 @@ local function evaluateFlash(ability)
         if mx == 0 then return false end
         return (UnitHealth("target") / mx) * 100 < (rule.lt or 0)
     elseif t == "nodebuff" then
+        -- Needs an attackable, living target to apply the debuff to -- otherwise
+        -- targetDebuffStacks returns 0 (no target) and 0 < stacks would flash
+        -- the maintenance glow out of combat / on a friendly target.
+        if not UnitExists("target") or UnitIsDead("target")
+            or not UnitCanAttack("player", "target") then return false end
         return targetDebuffStacks(rule.spell) < (rule.stacks or 1)
     elseif t == "nobuff" then
         -- Flash when the buff is absent, or (with `refresh = N`) when it has N
@@ -268,7 +301,14 @@ function Helper:Compute(role)
             r.hard = on
         elseif affordableFlashing[ab.name] then
             r.soft = true
-            r.hard = (ab == optimalAffordable)
+            -- The optimal GCD press gets the ring. A `nodebuff` MAINTENANCE
+            -- ability (Sunder Armor) ALSO glows whenever it's below the stack
+            -- cap and affordable -- a "keep it up" reminder that always lights
+            -- when it should be used (like the Battle Shout refresh flash), not
+            -- only when it happens to win the single optimal slot. It still
+            -- competes for the optimal ring above; this just stops the glow from
+            -- vanishing when something higher-priority is also up.
+            r.hard = (ab == optimalAffordable) or (ab.flash.type == "nodebuff")
         end
         -- Rage-cap dump: near the rage cap in combat, the rage-dump abilities
         -- (Heroic Strike / Cleave) light up HARD so you spend the excess into
