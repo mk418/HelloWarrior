@@ -12,6 +12,12 @@ ignore:
     - .github
     - DESIGN.md
     - README.md
+    # Project logo. Kept in the repo for use as the CurseForge project
+    # icon and any future docs/marketing surface, but not referenced
+    # anywhere in the addon itself -- WoW can't load PNG textures at
+    # runtime. Excluded from the released zip so users don't pull down
+    # a ~2.5 MB file the addon never reads.
+    - HelloWarrior.png
 
 # Generate a -nolib variant of the zip in case libs ever get embedded.
 enable-nolib-creation: yes
