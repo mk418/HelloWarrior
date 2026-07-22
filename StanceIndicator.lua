@@ -21,6 +21,10 @@ local function createStanceButton(parent, stanceId)
     local btn = CreateFrame("Button", "HelloWarriorStance" .. stanceId, parent, "SecureActionButtonTemplate")
     btn:SetSize(SIZE, SIZE)
     btn:RegisterForClicks("AnyUp")
+    -- Act on the up edge to match the registration; without this the 1.15.9+
+    -- click-edge gate (ActionButtonUseKeyDown CVar, default down) discards the
+    -- up-click and the button goes dead. See createAbilityButton in ActionBar.
+    btn:SetAttribute("useOnKeyDown", false)
     btn:SetAttribute("type", "spell")
     btn:SetAttribute("spell", STANCE_NAMES[stanceId])
 

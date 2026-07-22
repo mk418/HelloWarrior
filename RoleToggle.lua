@@ -20,6 +20,10 @@ function RT:Build(parent, bar)
     local btn = CreateFrame("Button", "HelloWarriorRoleToggle", parent or UIParent, "SecureActionButtonTemplate")
     btn:SetSize(WIDTH, HEIGHT)
     btn:RegisterForClicks("AnyUp")
+    -- Act on the up edge to match the registration; without this the 1.15.9+
+    -- click-edge gate (ActionButtonUseKeyDown CVar, default down) discards the
+    -- up-click and the toggle goes dead. See createAbilityButton in ActionBar.
+    btn:SetAttribute("useOnKeyDown", false)
     btn:SetAttribute("type", "macro")
     btn:SetAttribute("macrotext", (HelloWarriorCharDB.role == "tank") and TO_DPS or TO_TANK)
 

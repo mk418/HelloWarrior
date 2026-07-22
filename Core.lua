@@ -29,14 +29,81 @@ function ns:On(event, fn)
 end
 
 -- Shared "shine" cue: Blizzard's pet-autocast spinning sparkles. AttachShine
--- once per (named) button, then SetShine(btn, on) to toggle. The shine frame
--- needs a globally-unique name -- its template OnLoad fills its sparkles from
--- _G[name .. i] -- so we derive it from the button's name. The btn._shineOn
--- guard means AutoCastShine_AutoCastStart (which re-seeds the sparkles on every
--- call) fires only on an off->on transition, so SetShine is safe to call every
--- tick. Self-disables (no-op, no error) if the shine API is absent on this build.
+-- once per button, then SetShine(btn, on) to toggle. Two client generations:
+-- 1.15.9+ ships AutoCastOverlayTemplate (16 sparkle textures in a parentArray);
+-- older builds ship AutoCastShineTemplate, whose OnLoad fills its sparkles from
+-- _G[name .. i] -- so THAT frame needs a globally-unique name, derived from the
+-- button's. The btn._shineOn guard means the on-transition work (which re-seeds
+-- the sparkles on every call) fires only on an off->on flip, so SetShine is
+-- safe to call every tick. Self-disables (no-op, no error) if neither shine
+-- API exists on this build.
+--
+-- On 1.15.9+ we animate the sparkles OURSELVES instead of calling the
+-- template's ShowAutoCastEnabled: that method registers the frame in the
+-- global AutoCastOverlayManager.activeShines list, and Blizzard's own secure
+-- paths scan that list (the pet bar's Add/RemoveActiveShine tInsertUnique/
+-- tDeleteItem-scan it on every update) -- an addon-tainted entry there taints
+-- them and draws ADDON_ACTION_BLOCKED when they go on to call protected
+-- functions (e.g. PetActionBar:SetShownBase). The animator below replicates
+-- the manager's exact marching math (same speeds, same four-phase orbit) on
+-- our own frame's sparkles only, so no Blizzard-shared state is ever touched.
+local SHINE_SPEEDS = { 2, 4, 6, 8 }
+
+local function shineOnUpdate(self, elapsed)
+    local timers = self._timers
+    for i = 1, 4 do
+        local t = timers[i] + elapsed
+        if t > SHINE_SPEEDS[i] * 4 then t = t - SHINE_SPEEDS[i] * 4 end
+        timers[i] = t
+    end
+    local distance = self:GetWidth()
+    local sparkles = self.sparkles
+    for i = 1, 4 do
+        local timer, speed = timers[i], SHINE_SPEEDS[i]
+        if timer <= speed then
+            local p = timer / speed * distance
+            sparkles[i]:SetPoint("CENTER", self, "TOPLEFT", p, 0)
+            sparkles[4 + i]:SetPoint("CENTER", self, "BOTTOMRIGHT", -p, 0)
+            sparkles[8 + i]:SetPoint("CENTER", self, "TOPRIGHT", 0, -p)
+            sparkles[12 + i]:SetPoint("CENTER", self, "BOTTOMLEFT", 0, p)
+        elseif timer <= speed * 2 then
+            local p = (timer - speed) / speed * distance
+            sparkles[i]:SetPoint("CENTER", self, "TOPRIGHT", 0, -p)
+            sparkles[4 + i]:SetPoint("CENTER", self, "BOTTOMLEFT", 0, p)
+            sparkles[8 + i]:SetPoint("CENTER", self, "BOTTOMRIGHT", -p, 0)
+            sparkles[12 + i]:SetPoint("CENTER", self, "TOPLEFT", p, 0)
+        elseif timer <= speed * 3 then
+            local p = (timer - speed * 2) / speed * distance
+            sparkles[i]:SetPoint("CENTER", self, "BOTTOMRIGHT", -p, 0)
+            sparkles[4 + i]:SetPoint("CENTER", self, "TOPLEFT", p, 0)
+            sparkles[8 + i]:SetPoint("CENTER", self, "BOTTOMLEFT", 0, p)
+            sparkles[12 + i]:SetPoint("CENTER", self, "TOPRIGHT", 0, -p)
+        else
+            local p = (timer - speed * 3) / speed * distance
+            sparkles[i]:SetPoint("CENTER", self, "BOTTOMLEFT", 0, p)
+            sparkles[4 + i]:SetPoint("CENTER", self, "TOPRIGHT", 0, -p)
+            sparkles[8 + i]:SetPoint("CENTER", self, "TOPLEFT", p, 0)
+            sparkles[12 + i]:SetPoint("CENTER", self, "BOTTOMRIGHT", -p, 0)
+        end
+    end
+end
+
 function ns:AttachShine(btn, size)
-    local shine = CreateFrame("Frame", btn:GetName() .. "Shine", btn, "AutoCastShineTemplate")
+    local shine
+    if AutoCastOverlayMixin then  -- 1.15.9+
+        shine = CreateFrame("Frame", nil, btn, "AutoCastOverlayTemplate")
+        -- The overlay template also carries the golden pet-autocast corner
+        -- arrows; we only want the marching sparkles.
+        if shine.Corners then shine.Corners:Hide() end
+        -- Local-animator eligibility: exactly the 16 sparkles the orbit math
+        -- expects. If Blizzard reshapes the template the cue degrades to
+        -- nothing rather than erroring every frame.
+        shine._localAnim = (shine.sparkles and #shine.sparkles == 16) or false
+    elseif AutoCastShine_AutoCastStart then
+        shine = CreateFrame("Frame", btn:GetName() .. "Shine", btn, "AutoCastShineTemplate")
+    else
+        return  -- shine API absent on this build: the cue self-disables
+    end
     shine:SetSize(size, size)
     shine:SetPoint("CENTER", btn, "CENTER", 0, 0)
     shine:SetFrameLevel((btn:GetFrameLevel() or 0) + 4)
@@ -47,15 +114,35 @@ function ns:AttachShine(btn, size)
 end
 
 function ns:SetShine(btn, on, r, g, b)
-    if not btn._shine then return end
+    local shine = btn._shine
+    if not shine then return end
     on = on and true or false
     if btn._shineOn == on then return end
     if on then
-        btn._shine:Show()
-        if AutoCastShine_AutoCastStart then AutoCastShine_AutoCastStart(btn._shine, r, g, b) end
+        shine:Show()
+        if shine._localAnim then  -- 1.15.9+ overlay, driven locally
+            -- The template's OnLoad tints the sparkles autocast-yellow;
+            -- re-tint on the way on so our custom colour survives (the legacy
+            -- start call took r,g,b directly).
+            for _, sparkle in ipairs(shine.sparkles) do
+                if r then sparkle:SetVertexColor(r, g, b) end
+                sparkle:Show()
+            end
+            shine._timers = { 0, 0, 0, 0 }
+            shine:SetScript("OnUpdate", shineOnUpdate)
+        elseif AutoCastShine_AutoCastStart then
+            AutoCastShine_AutoCastStart(shine, r, g, b)
+        end
     else
-        if AutoCastShine_AutoCastStop then AutoCastShine_AutoCastStop(btn._shine) end
-        btn._shine:Hide()
+        if shine._localAnim then
+            shine:SetScript("OnUpdate", nil)
+            for _, sparkle in ipairs(shine.sparkles) do
+                sparkle:Hide()
+            end
+        elseif AutoCastShine_AutoCastStop then
+            AutoCastShine_AutoCastStop(shine)
+        end
+        shine:Hide()
     end
     btn._shineOn = on
 end

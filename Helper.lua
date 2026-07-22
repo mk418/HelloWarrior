@@ -14,6 +14,11 @@ local procWindow = {}
 local rageCostCache = {}
 local tacMasteryRank = 0
 
+-- Aura scans prefer C_UnitAuras' NAMED AuraData fields; the legacy positional
+-- UnitBuff/UnitDebuff are CVar-gated deprecation shims as of 1.15.9 (slated
+-- for removal) and remain here only as the fallback for older clients.
+local GetAuraDataByIndex = C_UnitAuras and C_UnitAuras.GetAuraDataByIndex
+
 local function rageCost(spellName)
     if rageCostCache[spellName] ~= nil then return rageCostCache[spellName] end
     local _, _, _, _, _, _, spellID = GetSpellInfo(spellName)
@@ -71,21 +76,40 @@ local function isOffCooldown(spellName)
     return (start + duration - GetTime()) <= 0
 end
 
+local function hasBuff(buffName)
+    if GetAuraDataByIndex then
+        for i = 1, 40 do
+            local aura = GetAuraDataByIndex("player", i, "HELPFUL")
+            if not aura then break end
+            if aura.name == buffName then return true end
+        end
+        return false
+    end
+    for i = 1, 40 do
+        local n = UnitBuff("player", i)
+        if not n then break end
+        if n == buffName then return true end
+    end
+    return false
+end
+
 local function hasAllBuffs(buffNames)
     for _, target in ipairs(buffNames) do
-        local found = false
-        for i = 1, 40 do
-            local n = UnitBuff("player", i)
-            if not n then break end
-            if n == target then found = true; break end
-        end
-        if not found then return false end
+        if not hasBuff(target) then return false end
     end
     return true
 end
 
 local function targetDebuffStacks(spellName)
     if not UnitExists("target") then return 0 end
+    if GetAuraDataByIndex then
+        for i = 1, 40 do
+            local aura = GetAuraDataByIndex("target", i, "HARMFUL|PLAYER")
+            if not aura then break end
+            if aura.name == spellName then return aura.applications or 1 end
+        end
+        return 0
+    end
     for i = 1, 40 do
         local n, _, count = UnitDebuff("target", i, "PLAYER")
         if not n then break end
@@ -107,11 +131,10 @@ end
 -- NAMED C_UnitAuras fields (.expirationTime/.duration) -- the positional
 -- UnitDebuff tuple is ambiguous on 1.15.x (see playerBuffRemaining). start is in
 -- the GetTime() base, exactly what Cooldown:SetCooldown(start, duration) wants.
-local GetTargetAuraByIndex = C_UnitAuras and C_UnitAuras.GetAuraDataByIndex
 function Helper:TargetDebuffTimer(spellName)
-    if not UnitExists("target") or not GetTargetAuraByIndex then return nil end
+    if not UnitExists("target") or not GetAuraDataByIndex then return nil end
     for i = 1, 40 do
-        local aura = GetTargetAuraByIndex("target", i, "HARMFUL|PLAYER")
+        local aura = GetAuraDataByIndex("target", i, "HARMFUL|PLAYER")
         if not aura then break end
         if aura.name == spellName then
             local exp, dur = aura.expirationTime, aura.duration
@@ -140,7 +163,6 @@ end
 -- (no positional-return ambiguity -- the legacy UnitBuff tuple varies by client)
 -- via C_UnitAuras, falling back to a name-only UnitBuff scan (presence only) if
 -- that API is missing.
-local GetAuraDataByIndex = C_UnitAuras and C_UnitAuras.GetAuraDataByIndex
 local function playerBuffRemaining(buffName)
     if GetAuraDataByIndex then
         for i = 1, 40 do

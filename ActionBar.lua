@@ -252,6 +252,13 @@ local function createAbilityButton(parent, name)
     -- mid-GCD, which is what triggered the constant "That ability isn't ready
     -- yet." Casting on up matches Blizzard's default bars and the ranged button.
     btn:RegisterForClicks("AnyUp")
+    -- 1.15.9+ SecureActionButton_OnClick gates which edge ACTS on the
+    -- useOnKeyDown attribute, falling back to the ActionButtonUseKeyDown CVar
+    -- (default: act on DOWN). An "AnyUp"-only button under that default is
+    -- completely dead -- the down edge never fires OnClick and the up edge is
+    -- discarded by the gate -- so pin the acting edge to match our registered
+    -- one. Inert on pre-1.15.9 clients (no gate reads it).
+    btn:SetAttribute("useOnKeyDown", false)
 
     local icon = btn:CreateTexture(nil, "BACKGROUND")
     icon:SetAllPoints()
@@ -1107,11 +1114,49 @@ local function releaseOverlay(btn)
     end
 end
 
--- ActionButton_ShowOverlayGlow reparents a pooled frame onto our button from an
--- insecure path (the ticker / shapeshift handler). This is the same call every
--- default action button makes, and it never touches our secure cast attributes
--- (type/macrotext), so click-to-cast stays secure; accepted tradeoff for using
--- Blizzard's native animated glow.
+-- 1.15.9+: Blizzard replaced the pooled overlay glow with per-button
+-- ActionButtonSpellAlertTemplate frames (modern flipbook proc art, no static
+-- square). We create our OWN frame from that template, parented to our button,
+-- and drive its animations directly -- deliberately NOT through
+-- ActionButtonSpellAlertManager: the manager records every glowing button in
+-- its shared activeAlerts table, and an addon-tainted entry in Blizzard shared
+-- state taints the secure action-bar paths that read it, drawing
+-- ADDON_ACTION_BLOCKED on Blizzard's own calls (e.g. an action button's
+-- SetAttribute in UpdatePressAndHoldAction). A frame we own taints nothing
+-- Blizzard reads. Show/hide mirror the manager's ShowAlert/HideAlert bodies:
+-- 1.4x button size, birth animation chaining into the loop (the template's
+-- OnLoad wires ProcStartAnim's finish to ProcLoop; OnHide stops the loop).
+local function acquireSpellAlert(btn)
+    if not btn.hwSpellAlert then
+        local f = CreateFrame("Frame", nil, btn, "ActionButtonSpellAlertTemplate")
+        local w, h = btn:GetSize()
+        f:SetSize(w * 1.4, h * 1.4)
+        f:SetPoint("CENTER", btn, "CENTER", 0, 0)
+        btn.hwSpellAlert = f
+    end
+    return btn.hwSpellAlert
+end
+
+local function showSpellAlert(btn)
+    local f = acquireSpellAlert(btn)
+    f:Show()
+    f.playingAnimation = true
+    f.ProcStartAnim:Play()
+end
+
+local function hideSpellAlert(btn)
+    local f = btn.hwSpellAlert
+    if not f then return end
+    f:Hide()
+    f.ProcStartAnim:Stop()
+    f.playingAnimation = false
+end
+
+-- ActionButton_ShowOverlayGlow (pre-1.15.9) reparents a pooled frame onto our
+-- button from an insecure path (the ticker / shapeshift handler). This is the
+-- same call every default action button makes, and it never touches our secure
+-- cast attributes (type/macrotext), so click-to-cast stays secure; accepted
+-- tradeoff for using Blizzard's native animated glow.
 local function showHardGlow(btn)
     -- Reconcile stale intent: if Blizzard reclaimed the pooled frame out from
     -- under us, btn.overlay is nil while hardGlowOn still says "overlay". Clear
@@ -1120,7 +1165,13 @@ local function showHardGlow(btn)
         btn.hardGlowOn = nil
     end
     if btn.hardGlowOn then return end
-    if ActionButton_ShowOverlayGlow then
+    if ActionButtonSpellAlertMixin then  -- 1.15.9+ (ships with the template)
+        if pcall(showSpellAlert, btn) then
+            btn.hardGlowOn = "alert"
+            return
+        end
+        pcall(hideSpellAlert, btn)
+    elseif ActionButton_ShowOverlayGlow then
         local ok = pcall(ActionButton_ShowOverlayGlow, btn)
         if ok and btn.overlay then
             suppressOverlaySquare(btn.overlay)
@@ -1137,6 +1188,9 @@ end
 
 local function hideHardGlow(btn)
     if not btn.hardGlowOn and not btn.overlay then return end
+    if btn.hardGlowOn == "alert" then
+        pcall(hideSpellAlert, btn)
+    end
     -- Tear the fallback ring down if it's up...
     if btn.hardGlowOn == "fallback" then
         hideRing(btn.hardFlash)

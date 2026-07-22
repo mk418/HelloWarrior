@@ -52,13 +52,18 @@ read_globals = {
     "IsShiftKeyDown",
     "IsControlKeyDown",
     "IsAltKeyDown",
-    -- Action-button proc-glow overlay (Blizzard FrameXML globals)
+    -- Action-button proc-glow: legacy pooled-overlay globals (pre-1.15.9) and
+    -- the spell-alert template/mixin that replaced them (1.15.9+; we drive our
+    -- own frame -- never the shared manager, whose tables would taint)
     "ActionButton_ShowOverlayGlow",
     "ActionButton_HideOverlayGlow",
     "ActionButton_OverlayGlowAnimOutFinished",
-    -- Pet-autocast spinning shine (used for the queued-on-next-swing cue)
+    "ActionButtonSpellAlertMixin",
+    -- Pet-autocast spinning shine (used for the queued-on-next-swing cue):
+    -- legacy globals (pre-1.15.9) and the overlay mixin that replaced them
     "AutoCastShine_AutoCastStart",
     "AutoCastShine_AutoCastStop",
+    "AutoCastOverlayMixin",
     -- Inventory
     "GetInventoryItemTexture",
     "GetInventoryItemLink",

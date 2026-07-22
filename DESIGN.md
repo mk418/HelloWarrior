@@ -95,7 +95,7 @@ Unlike HelloTotems (which ships a `Bindings.xml`), HelloWarrior binds at runtime
 
 - **Secure cast path.** Buttons are `SecureActionButtonTemplate` with `type = "macro"`; the role swap runs in a `SecureHandlerStateTemplate` snippet (`SetAttribute`/`RunAttribute` only — both whitelisted in the restricted environment). All secure (re)configuration happens out of combat; `Relayout`, keybind `Apply`, and macro refresh no-op under `InCombatLockdown` and re-run on `PLAYER_REGEN_ENABLED`.
 - **Non-secure overlays** (textures, status bars, font strings, the autocast shine) are toggled freely, including in combat — none are protected.
-- **Shared shine** (`ns:AttachShine` / `ns:SetShine`) wraps Blizzard's `AutoCastShineTemplate`; a per-frame guard starts/stops the sparkle once per transition so the 0.1s ticker doesn't re-seed it.
+- **Shared shine** (`ns:AttachShine` / `ns:SetShine`) wraps Blizzard's pet-autocast sparkles — `AutoCastOverlayTemplate` on 1.15.9+, `AutoCastShineTemplate` on older builds; a per-frame guard starts/stops the sparkle once per transition so the 0.1s ticker doesn't re-seed it.
 - **Aura reads** use `C_UnitAuras` named `AuraData` fields (`.name`, `.expirationTime`) rather than positional `UnitBuff` returns, which are ambiguous on 1.15.x (the legacy `rank` slot shifts `expirationTime`).
 - **One event frame**, `ns:On(event, fn)` dispatch, gated so non-Warriors load the addon as a no-op.
 - `luacheck .` is clean (lua51 std, WoW API in `read_globals`).

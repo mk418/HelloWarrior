@@ -1,8 +1,8 @@
-## Interface: 11508
+## Interface: 11509
 ## Title: HelloWarrior
 ## Notes: Lean, opinionated ability manager for Warrior
 ## Author: Drikk
-## Version: 0.1.0
+## Version: 0.1.1
 ## X-Curse-Project-ID: 1565896
 ## SavedVariables: HelloWarriorDB
 ## SavedVariablesPerCharacter: HelloWarriorCharDB
