@@ -10,6 +10,7 @@ local ROW_GAP = 4
 local SECTION_GAP = 10
 local RAGE_POWER_TYPE = Enum and Enum.PowerType and Enum.PowerType.Rage or 1
 local HEADER_BAR_HEIGHT = 12  -- rage + swing timer stack in the header band
+local RANGE_TEXT_HEIGHT = 18  -- fixed strip for the melee readout above the cluster
 
 -- Rage-cap warning. While ns.Helper:IsRageCapping() is true (>=80% rage in
 -- combat -- the single shared trigger that also lights up Heroic Strike / Cleave
@@ -507,6 +508,11 @@ function AB:Build()
     -- Parented to the container so it drags with it; updated in AB:Tick.
     local rangeText = container:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     rangeText:SetPoint("BOTTOM", container, "TOP", 0, SECTION_GAP)
+    -- Explicit height so the strip it occupies is fixed. An empty FontString
+    -- measures zero, so without this the cast bar anchored above it would slide
+    -- down onto the readout every time the text cleared, then be overdrawn when
+    -- MELEE came back.
+    rangeText:SetHeight(RANGE_TEXT_HEIGHT)
     self.rangeText = rangeText
 
     -- Abilities bar (secure handler for role swap).
@@ -680,6 +686,10 @@ function AB:Build()
 
     -- Swing timer, in the header row between the stance buttons and role toggle.
     ns.SwingTimer:Build(container, SECTION_GAP)
+
+    -- Cast bar, at the very top of the cluster (above the range readout). Built
+    -- after the readout exists, since it anchors to it.
+    ns.CastBar:Build(container)
 
     -- Rage bar: shares the header band with the swing timer (between the stance
     -- buttons and the role toggle). Rage takes the TOP half (always shown), the

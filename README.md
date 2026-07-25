@@ -13,6 +13,7 @@ A lean, opinionated ability manager for WoW Classic Era Warriors. It lays out yo
 - **Strips wasted buffs.** Using an ability drops caster blessings (and Salvation, for tanks) that are wasted on a Rage class.
 - **Combat readouts.** A main-hand **swing timer**, a **rage bar** (it throbs near max in combat — and Heroic Strike / Cleave light up — so you dump the excess before it caps), and an in/out-of-**melee range** indicator, plus GCD and cooldown sweeps, an out-of-range tint, a queued-on-next-swing glow for Heroic Strike / Cleave, a big Sunder Armor stack count centered on the button (with the button's sweep running the Sunder timer so you see it about to drop off), and a Battle Shout refresh reminder.
 - **Racial + ranged button.** Your race's active racial (Stoneform, Blood Fury, War Stomp, …) and a weapon-adaptive ranged-pull button sit on the shouts row.
+- **Cast bar.** Its own, at the top of the cluster, so it never draws through the ability grid the way Blizzard's centred one does. HelloUI hides Blizzard's while it's up; `/hw castbar off` hands it back.
 - **In-combat shield swap.** One button flips your off-hand between your weapon and a shield — shield up for a dangerous moment, then back to dual-wield, mid-fight. It only touches the off-hand, so your main-hand swing timer keeps ticking.
 - **Your keybinds.** Bind keys to on-screen slots with a hover-and-press editor; the binding follows the visible button as the layout collapses.
 

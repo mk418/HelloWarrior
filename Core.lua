@@ -183,6 +183,13 @@ SlashCmdList["HELLOWARRIOR"] = function(msg)
         if arg == "on" then ns.ActionBar:SetHWBarsVisible(true)
         elseif arg == "off" then ns.ActionBar:SetHWBarsVisible(false)
         else ns.ActionBar:SetHWBarsVisible(not HelloWarriorCharDB.showHWBars) end
+    elseif cmd == "castbar" then
+        if not ns.enabled then return end
+        if arg == "on" then ns.CastBar:SetVisible(true)
+        elseif arg == "off" then ns.CastBar:SetVisible(false)
+        else ns.CastBar:SetVisible(HelloWarriorCharDB.showCastBar == false) end
+        print("|cffc79c6eHelloWarrior|r cast bar " ..
+            (HelloWarriorCharDB.showCastBar ~= false and "shown." or "hidden -- Blizzard's returns on HelloUI's next pass."))
     elseif cmd == "pos" then
         if not ns.enabled then return end
         if arg == "reset" then
@@ -213,6 +220,7 @@ SlashCmdList["HELLOWARRIOR"] = function(msg)
         print("|cffc79c6eHelloWarrior|r commands:")
         print("  /hw config || /hw reset")
         print("  /hw bars [on||off]  (HelloWarrior bars)")
+        print("  /hw castbar [on||off]  (our cast bar; Blizzard's hides while it shows)")
         print("  /hw pos [lock||unlock||reset]")
         print("  /hw keys [clear||reset] (edit keybindings)")
         print("  /hw swap [clear] (save off-hand weapon/shield toggle)")

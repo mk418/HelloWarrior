@@ -9,6 +9,10 @@ local charDefaults = {
     role = "dps",
     showHWBars = true,
     locked = true,
+    -- Our own cast bar, at the top of the cluster. On by default: HelloUI
+    -- switches Blizzard's off while ours is present, so defaulting this off
+    -- would leave a Warrior with no cast bar at all.
+    showCastBar = true,
 }
 
 local function applyDefaults(target, defaults)
@@ -56,10 +60,11 @@ function Config:CreatePanel()
 
     local hwBarsCB = makeCheckbox(panel, "Show HelloWarrior bars", subtitle, -24)
     local lockCB = makeCheckbox(panel, "Lock position", hwBarsCB, -4)
+    local castCB = makeCheckbox(panel, "Show cast bar (hides Blizzard's)", lockCB, -4)
 
     local resetBtn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
     resetBtn:SetSize(120, 22)
-    resetBtn:SetPoint("TOPLEFT", lockCB, "BOTTOMLEFT", 0, -8)
+    resetBtn:SetPoint("TOPLEFT", castCB, "BOTTOMLEFT", 0, -8)
     resetBtn:SetText("Reset position")
     resetBtn:SetScript("OnClick", function() ns.ActionBar:ResetPosition() end)
 
@@ -78,9 +83,11 @@ function Config:CreatePanel()
     local function sync()
         hwBarsCB:SetChecked(HelloWarriorCharDB.showHWBars ~= false)
         lockCB:SetChecked(HelloWarriorCharDB.locked ~= false)
+        castCB:SetChecked(HelloWarriorCharDB.showCastBar ~= false)
     end
     hwBarsCB:SetScript("OnClick", function(self) ns.ActionBar:SetHWBarsVisible(self:GetChecked()); sync() end)
     lockCB:SetScript("OnClick", function(self) ns.ActionBar:SetLocked(self:GetChecked()); sync() end)
+    castCB:SetScript("OnClick", function(self) ns.CastBar:SetVisible(self:GetChecked()); sync() end)
     panel:SetScript("OnShow", sync)
 
     local help = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
@@ -90,6 +97,7 @@ function Config:CreatePanel()
         "Slash commands:\n" ..
         "  /hw config - open this panel\n" ..
         "  /hw bars [on||off] - HelloWarrior bars\n" ..
+        "  /hw castbar [on||off] - our cast bar (Blizzard's is hidden while it shows)\n" ..
         "  /hw pos [lock||unlock||reset] - lock / move the cluster\n" ..
         "  /hw keys - edit keybindings (hover a button, press a key)\n" ..
         "  /hw keys clear||reset - clear or restore default keybindings\n" ..

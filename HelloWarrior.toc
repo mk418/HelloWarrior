@@ -17,4 +17,5 @@ StanceIndicator.lua
 RoleToggle.lua
 ActionBar.lua
 SwingTimer.lua
+CastBar.lua
 Keybinds.lua

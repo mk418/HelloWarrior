@@ -15,6 +15,9 @@ A lean, opinionated ability manager for World of Warcraft Classic Era Warriors. 
 ## Layout
 
 ```
+        ┌───────────────────────────────────────────────┐
+        │ Bandage                                  1.4s │  cast bar (top of the stack)
+        └───────────────────────────────────────────────┘
                        MELEE / CHARGE / OUT              <- range readout (coloured)
         ┌────────────┬───────────────────────┬─────────┐
         │ ⛨  ⚔  ☠     │   rage bar  (top half) │  DPS /  │  header row
@@ -32,6 +35,7 @@ A lean, opinionated ability manager for World of Warcraft Classic Era Warriors. 
 - The **ability grid** swaps its whole macro set between DPS and tank via a secure snippet; hidden talents collapse within each row. DPS auto-wraps at 7/row; tank uses an explicit row layout.
 - The **shouts row** carries the shouts, a weapon-adaptive ranged button, the player's **own race racials** (Stoneform, Blood Fury, …) appended after the shouts, and an **off-hand swap** button at the end.
 - The **header** packs the stance buttons (left), the role toggle (right), and a stacked **rage bar + swing timer** between them.
+- The **cast bar** sits at the very top, above the range readout. It exists because Blizzard's player cast bar is centred in the strip this cluster occupies, and moving Blizzard's is the hard version of that problem — it is an Edit Mode system, so an anchor set from outside is reverted every time Edit Mode closes. Drawing our own is cheaper, and HelloUI switches Blizzard's off while ours is on screen (through the client's own `SetAndUpdateShowCastbar`, the call it uses when an overlay bar replaces the player's). Warriors cast almost nothing, so in practice this shows bandages, mounts, hearthstones and food — still worth having, since a bandage broken by a dot is a real cost. `/hw castbar off` gives Blizzard's back.
 
 ## Current scope (implemented)
 
