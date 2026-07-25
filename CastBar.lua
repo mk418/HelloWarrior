@@ -3,7 +3,18 @@ local ADDON_NAME, ns = ...
 ns.CastBar = {}
 local CB = ns.CastBar
 
-local BAR_HEIGHT = 16
+-- Blizzard's own player cast bar dimensions, 195x13, deliberately: HelloUI
+-- restyles that frame to look like this one for every non-Warrior, and two bars
+-- that are meant to be the same bar should not differ in size depending on which
+-- addon drew them. It is also simply better than the full-width version this
+-- started as - a cast bar as wide as the ability grid reads as a progress bar
+-- for the whole cluster.
+local BAR_WIDTH = 195
+local BAR_HEIGHT = 13
+-- Small font for both strings. At 13 tall there is no room for a full-size one:
+-- GameFontHighlight's ink stands proud of a 13px bar, which is exactly the
+-- overspill HelloUI's version showed once its border art was hidden.
+local FONT = "GameFontHighlightSmall"
 local GAP = 4          -- between the bar and the header band below it
 local TEXT_GAP = 2     -- between the range readout and the bar below it
 local SECTION_GAP = 10 -- ActionBar's own spacing, used when the bar is off
@@ -49,17 +60,19 @@ function CB:Build(container)
     if self.bar then return end
 
     local bar = CreateFrame("StatusBar", "HelloWarrior_CastBar", container)
-    bar:SetHeight(BAR_HEIGHT)
+    bar:SetSize(BAR_WIDTH, BAR_HEIGHT)
     -- Directly above the header band, i.e. immediately over the rage bar. It
     -- was one slot higher to begin with, above the range readout, and that put
     -- it far enough from the cluster to read as a separate thing floating in
     -- space. The readout moves up instead (see Apply) -- it is a single word and
     -- does not mind the distance; a bar you are timing an interrupt against
-    -- does. Full container width rather than the rage bar's inset span, because
-    -- this one carries a spell name.
+    -- does.
+    --
+    -- Centred at a fixed width rather than stretched between the container's
+    -- edges: the container's width varies with the player's race (a two-racial
+    -- Undead bottom row is 356 wide against a Human's 316), and a cast bar that
+    -- changes size per character is not the same bar as HelloUI's.
     bar:SetPoint("BOTTOM", container, "TOP", 0, GAP)
-    bar:SetPoint("LEFT", container, "LEFT", 0, 0)
-    bar:SetPoint("RIGHT", container, "RIGHT", 0, 0)
     bar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
     bar:SetMinMaxValues(0, 1)
     bar:SetValue(0)
@@ -69,13 +82,16 @@ function CB:Build(container)
     bg:SetColorTexture(0, 0, 0, 0.55)
 
     -- Spell name on the left, countdown on the right: the two things you act on.
-    local label = bar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    local label = bar:CreateFontString(nil, "OVERLAY", FONT)
     label:SetPoint("LEFT", bar, "LEFT", 4, 0)
     label:SetPoint("RIGHT", bar, "RIGHT", -40, 0)
     label:SetJustifyH("LEFT")
+    -- One line, always. Wrapped text in a 13px bar climbs straight out of it.
+    if label.SetWordWrap then label:SetWordWrap(false) end
+    if label.SetMaxLines then label:SetMaxLines(1) end
     self.label = label
 
-    local timer = bar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    local timer = bar:CreateFontString(nil, "OVERLAY", FONT)
     timer:SetPoint("RIGHT", bar, "RIGHT", -4, 0)
     self.timer = timer
 
