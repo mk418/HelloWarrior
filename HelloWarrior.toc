@@ -6,6 +6,8 @@
 ## X-Curse-Project-ID: 1565896
 ## SavedVariables: HelloWarriorDB
 ## SavedVariablesPerCharacter: HelloWarriorCharDB
+## IconTexture: Interface\AddOns\HelloWarrior\Icon.png
+## Category: Combat
 
 Core.lua
 Config.lua

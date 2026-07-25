@@ -12,11 +12,9 @@ ignore:
     - .github
     - DESIGN.md
     - README.md
-    # Project logo. Kept in the repo for use as the CurseForge project
-    # icon and any future docs/marketing surface, but not referenced
-    # anywhere in the addon itself -- WoW can't load PNG textures at
-    # runtime. Excluded from the released zip so users don't pull down
-    # a logo file the addon never reads.
+    # Project image for CurseForge, not something the client needs to download.
+    # Icon.png is deliberately not listed here — the TOC's IconTexture points at
+    # it, so it has to ship.
     - HelloWarrior.png
 
 # Generate a -nolib variant of the zip in case libs ever get embedded.
