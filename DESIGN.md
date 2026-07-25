@@ -90,6 +90,8 @@ HelloWarrior/
 │                              cooldown/rage/range tint, range readout, rage bar,
 │                              position/lock, the 0.1s ticker
 ├── SwingTimer.lua          -- main-hand swing timer
+├── CastBar.lua             -- our own player cast bar (HelloUI hides Blizzard's
+│                              while it exists; detection is by frame, not addon)
 └── Keybinds.lua            -- position-following override bindings + keybind mode
 ```
 
@@ -107,6 +109,7 @@ Unlike HelloTotems (which ships a `Bindings.xml`), HelloWarrior binds at runtime
 ## Ideas / TODO
 
 Reactive combat cues:
+- **Target cast bar** — the natural next tenant of the strip the player cast bar now sits in, and a better fit for it: a Warrior barely casts, but the thing being cast *at* you is what Pummel and Shield Bash exist for. Same `UnitCastingInfo`/`UnitChannelInfo` machinery with `"target"`, plus `PLAYER_TARGET_CHANGED` to clear it. One decision to make first: a second bar above the player's, or one bar that shows yours while you cast and the target's otherwise. One bar is tidier but hides your bandage at exactly the moment a caster is casting at you, so the second bar is probably right.
 - **Sound cues (opt-in)** — a short sound on Overpower/Revenge proc, entering Execute range, or an interrupt becoming available. (The interrupt *visual* alert already ships; this would be the optional audio half.)
 - **Interrupt banner (opt-in)** — an optional on-screen banner / sound to pair with the existing Pummel·Shield Bash interrupt glow, for when a button flash isn't loud enough.
 
