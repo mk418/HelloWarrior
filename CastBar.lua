@@ -4,7 +4,9 @@ ns.CastBar = {}
 local CB = ns.CastBar
 
 local BAR_HEIGHT = 16
-local GAP = 4          -- between the bar and the range readout below it
+local GAP = 4          -- between the bar and the header band below it
+local TEXT_GAP = 2     -- between the range readout and the bar below it
+local SECTION_GAP = 10 -- ActionBar's own spacing, used when the bar is off
 local HOLD = 0.6       -- seconds the bar lingers red after a failed cast
 
 -- Cast bar for the cluster, sitting at the very top of it: above the range
@@ -48,13 +50,14 @@ function CB:Build(container)
 
     local bar = CreateFrame("StatusBar", "HelloWarrior_CastBar", container)
     bar:SetHeight(BAR_HEIGHT)
-    -- Top of the stack. Anchored above the range readout rather than to the
-    -- container's top edge, so the two never fight for the same strip -- and
-    -- the readout is given an explicit height in AB:Build for exactly this
-    -- reason, since an empty FontString measures zero and would let the bar
-    -- slide down onto it the moment the text cleared.
-    local anchor = ns.ActionBar.rangeText or container
-    bar:SetPoint("BOTTOM", anchor, "TOP", 0, GAP)
+    -- Directly above the header band, i.e. immediately over the rage bar. It
+    -- was one slot higher to begin with, above the range readout, and that put
+    -- it far enough from the cluster to read as a separate thing floating in
+    -- space. The readout moves up instead (see Apply) -- it is a single word and
+    -- does not mind the distance; a bar you are timing an interrupt against
+    -- does. Full container width rather than the rage bar's inset span, because
+    -- this one carries a spell name.
+    bar:SetPoint("BOTTOM", container, "TOP", 0, GAP)
     bar:SetPoint("LEFT", container, "LEFT", 0, 0)
     bar:SetPoint("RIGHT", container, "RIGHT", 0, 0)
     bar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
@@ -103,6 +106,7 @@ function CB:Build(container)
 
     bar:Hide()
     self.bar = bar
+    self.container = container
     self:Apply()
 end
 
@@ -143,11 +147,26 @@ function CB:Fail(word)
     self.bar:Show()
 end
 
--- Switched off: hide it and leave it hidden. Nothing else to restore -- the
--- frame is ours, so "off" is simply a bar that never shows.
+-- The bar owns the strip it inserts, so switching it off has to give that strip
+-- back: the range readout sits above the bar when there is one and returns to
+-- the container's own top edge when there is not. Otherwise turning the bar off
+-- would leave the readout floating over a 20px hole.
 function CB:Apply()
     if not self.bar then return end
-    if HelloWarriorCharDB.showCastBar == false then
+
+    local on = HelloWarriorCharDB.showCastBar ~= false
+
+    local rangeText = ns.ActionBar.rangeText
+    if rangeText and self.container then
+        rangeText:ClearAllPoints()
+        if on then
+            rangeText:SetPoint("BOTTOM", self.bar, "TOP", 0, TEXT_GAP)
+        else
+            rangeText:SetPoint("BOTTOM", self.container, "TOP", 0, SECTION_GAP)
+        end
+    end
+
+    if not on then
         self.startTime, self.holdUntil = nil, nil
         self.bar:Hide()
     end
