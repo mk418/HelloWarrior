@@ -14,12 +14,11 @@
 #   3. git tag v0.1.0 && git push origin v0.1.0
 # The workflow will fire on the tag push, not on the version bump.
 #
-# Commit messages are public. The packager builds the changelog by piping the
-# raw body (`git log --pretty=format:%B`) of every commit in the tag range
-# straight into the release notes and the CurseForge upload — it strips only
-# `git-svn-id:` and revert lines, and .pkgmeta has no filter for anything else.
-# So keep trailers (Co-Authored-By, Signed-off-by, …) out of commit messages
-# here: whatever you write shows up verbatim under the next version heading.
+# Commit messages are public: the changelog is built from the body of every
+# commit in the tag range. Trailers (Co-Authored-By, Signed-off-by, …) are
+# filtered out of it by .github/changelog.sh — see that script and the
+# `manual-changelog` block in .pkgmeta. Everything else you write in a commit
+# body shows up verbatim under the next version heading.
 
 name: Release
 
@@ -60,6 +59,17 @@ jobs:
             exit 1
           fi
           echo "TOC version $toc_version matches tag $GITHUB_REF_NAME."
+
+      # Must run before the packager: it writes the CHANGELOG.md that .pkgmeta
+      # declares as the manual changelog, which is what the packager then uses
+      # for the GitHub Release body, the CurseForge upload and release.json.
+      # Left to itself the packager generates that changelog from raw commit
+      # bodies, trailers and all.
+      # Invoked through bash rather than executed: this repo keeps every file at
+      # mode 644 (see "Normalize file modes to 644"), and core.fileMode is off
+      # locally, so the executable bit would not survive a commit anyway.
+      - name: Generate changelog
+        run: bash .github/changelog.sh "$GITHUB_REF_NAME"
 
       - name: Package and release
         uses: BigWigsMods/packager@v2

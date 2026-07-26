@@ -3,3 +3,7 @@
 
 # Claude Code session scratch (workflow scripts, transcripts) — not project files.
 .claude/
+
+# Generated at release time by .github/changelog.sh and consumed by the
+# packager (see .pkgmeta). Ships in the zip, but is never committed.
+CHANGELOG.md
