@@ -44,7 +44,7 @@ A lean, opinionated ability manager for World of Warcraft Classic Era Warriors. 
 - **Stance-dance macros** — `/cast [nostance:N] <Stance>` then `/cast <Ability>`, so abilities work from any stance. DPS holds **Ctrl** to opt into a Berserker dance (a secure button can't read rage, so the rage-losing switch is opt-in); tanks always dance into Defensive where applicable.
 - Single click-edge (`AnyUp`) so a press fires the macro once (not twice).
 - **Buff auto-cancel** — ability macros `/cancelaura` wasted caster blessings (and Salvation for tanks) so they fall off as you engage.
-- Weapon-adaptive **ranged button** (`[worn:Guns]…` picks Shoot/Throw).
+- Weapon-adaptive **ranged button** (`[worn:Guns]…` picks Shoot/Throw and starts melee auto-attack).
 - **In-combat off-hand swap** — one secure button toggles the off-hand between a saved weapon and a saved shield via a single self-evaluating `/equipslot [equipped:Shields] 17 <weapon>; 17 <shield>` macro (one conditional, one equip → no mid-macro bounce, no state machine, no in-combat `SetAttribute`). Only the off-hand changes, so the main-hand swing timer is untouched. Define the two ends by snapshotting your gear with `/hw swap` (once per item). The same secure `/equipslot` path is the only combat-legal swap — Equipment Manager is `#nocombat` and `EquipItemByName` only picks the item up onto the cursor in combat.
 
 **Recommendation engine** (`Helper:Compute`)

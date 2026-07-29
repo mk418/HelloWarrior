@@ -23,10 +23,10 @@ local RAGE_WARN_PERIOD = 0.5                   -- seconds per half-cycle (full t
 -- Ranged-attack button. One macro fires whichever ranged weapon is equipped
 -- via [worn:...] conditionals, so only the matching ability is cast. "!" keeps
 -- the auto-repeat Shoot abilities firing instead of toggling off; Throw is a
--- single cast so it gets no "!". Works in every stance; no /startattack (that
--- starts melee auto-attack, the opposite of a ranged pull).
+-- single cast so it gets no "!". /startattack also engages melee auto-attack,
+-- ready for the target reaching melee range.
 local RANGED_SLOT = 18  -- INVSLOT_RANGED
-local RANGED_MACRO = "/cast [worn:Guns] !Shoot Gun; [worn:Bows] !Shoot Bow; [worn:Crossbows] !Shoot Crossbow; [worn:Thrown] Throw"
+local RANGED_MACRO = "/cast [worn:Guns] !Shoot Gun; [worn:Bows] !Shoot Bow; [worn:Crossbows] !Shoot Crossbow; [worn:Thrown] Throw\n/startattack"
 local RANGED_EMPTY_ICON = "Interface\\Icons\\Ability_Marksmanship"
 
 -- Off-hand swap toggle. INVSLOT_OFFHAND is 17; the glyph falls back to this
