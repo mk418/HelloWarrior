@@ -143,6 +143,21 @@ do
     CANCEL_BY_ROLE.dps = block("dps")
 end
 
+local function finishMacro(lines, ability, role)
+    if not ability.noStartAttack then
+        table.insert(lines, "/startattack")
+    end
+    -- Strip unwanted buffs as a side-effect of the press (in or out of combat).
+    -- Role-aware; shouts and the ranged button pass no role and are untouched.
+    local cancels = role and CANCEL_BY_ROLE[role]
+    if cancels then
+        for _, line in ipairs(cancels) do
+            table.insert(lines, line)
+        end
+    end
+    return table.concat(lines, "\n")
+end
+
 local function buildMacro(ability, role)
     local lines = { "#showtooltip " .. ability.name }
     if ability.combo then
@@ -168,18 +183,40 @@ local function buildMacro(ability, role)
             stanceIdList(ability.stance), defaultStanceSpell(ability.stance)))
         table.insert(lines, "/cast " .. ability.name)
     end
-    if not ability.noStartAttack then
-        table.insert(lines, "/startattack")
-    end
-    -- Strip unwanted buffs as a side-effect of the press (in or out of combat).
-    -- Role-aware; shouts and the ranged button pass no role and are untouched.
-    local cancels = role and CANCEL_BY_ROLE[role]
-    if cancels then
-        for _, line in ipairs(cancels) do
-            table.insert(lines, line)
-        end
-    end
-    return table.concat(lines, "\n")
+    return finishMacro(lines, ability, role)
+end
+
+-- A learned Pummel and Shield Bash share one combat-safe DPS button. Macro
+-- conditionals choose Shield Bash when a shield is equipped in one of its
+-- supported stances; otherwise the first line dances to Pummel's stance and
+-- the second casts Pummel. The cosmetic resolver uses the same conditions.
+local function buildAdaptiveFallbackMacro(primary, fallback, role)
+    local primaryStances = stanceIdList(primary.stance)
+    local fallbackStances = stanceIdList(fallback.stance)
+    local lines = {
+        ("#showtooltip [equipped:Shields,stance:%s] %s; %s"):format(
+            fallbackStances, fallback.name, primary.name),
+        ("/cast [noequipped:Shields,nostance:%s] %s"):format(
+            primaryStances, defaultStanceSpell(primary.stance)),
+        ("/cast [equipped:Shields,stance:%s] %s; %s"):format(
+            fallbackStances, fallback.name, primary.name),
+    }
+    return finishMacro(lines, primary, role)
+end
+
+-- Before Pummel is learned, keep Shield Bash's action prepared behind a shield
+-- condition. That makes equipping a shield in combat immediately activate the
+-- fallback without letting the unavailable button change stance when unarmed.
+local function buildUnlearnedFallbackMacro(primary, fallback, role)
+    local fallbackStances = stanceIdList(fallback.stance)
+    local lines = {
+        ("#showtooltip [equipped:Shields] %s; %s"):format(
+            fallback.name, primary.name),
+        ("/cast [equipped:Shields,nostance:%s] %s"):format(
+            fallbackStances, defaultStanceSpell(fallback.stance)),
+        ("/cast [equipped:Shields] %s"):format(fallback.name),
+    }
+    return finishMacro(lines, fallback, role)
 end
 
 local function isHidden(ability)
@@ -426,6 +463,18 @@ function AB:ResetPosition()
 end
 
 local function setSlotMacro(btn, ability, role)
+    -- Resolve learned fallbacks without consulting equipment here. Secure
+    -- macrotext can only be changed out of combat, so Shield Bash must already
+    -- be installed before an in-combat shield swap makes it the visible DPS
+    -- interrupt. The button's displayed ability is resolved separately below.
+    local fallback = ability and ability.fallback
+    if fallback and fallback.requiresShield and GetSpellInfo(fallback.name) then
+        if GetSpellInfo(ability.name) then
+            return buildAdaptiveFallbackMacro(ability, fallback, role)
+        end
+        return buildUnlearnedFallbackMacro(ability, fallback, role)
+    end
+    ability = ns.Abilities.ResolveAbility(ability, true)
     if not ability or isHidden(ability) then
         return ""
     end
@@ -536,8 +585,10 @@ function AB:Build()
 
         local tankAb = tankAbils[i]
         local dpsAb  = dpsAbils[i]
-        btn.tankAbility = tankAb
-        btn.dpsAbility  = dpsAb
+        btn.tankAbilityDefinition = tankAb
+        btn.dpsAbilityDefinition = dpsAb
+        btn.tankAbility = ns.Abilities.ResolveAbility(tankAb)
+        btn.dpsAbility = ns.Abilities.ResolveAbility(dpsAb)
         btn:SetAttribute("macrotext-tank", setSlotMacro(btn, tankAb, "tank"))
         btn:SetAttribute("macrotext-dps",  setSlotMacro(btn, dpsAb, "dps"))
         btn:SetAttribute("type", "macro")
@@ -854,6 +905,22 @@ function AB:OnRoleApplied(role)
         applyAbilityToButton(btn, ab)
     end
     self:Relayout()
+    self:Tick()
+end
+
+-- Re-resolve equipment-sensitive fallbacks without touching protected button
+-- attributes. This is combat-safe and lets the DPS interrupt glyph/tooltip/glow
+-- follow an in-combat shield swap; its fallback macro was prepared beforehand.
+function AB:RefreshResolvedAbilities()
+    if not self.buttons then return end
+    local role = self.bar and self.bar:GetAttribute("effectiveRole")
+        or HelloWarriorCharDB.role or "dps"
+    for _, btn in ipairs(self.buttons) do
+        btn.tankAbility = ns.Abilities.ResolveAbility(btn.tankAbilityDefinition)
+        btn.dpsAbility = ns.Abilities.ResolveAbility(btn.dpsAbilityDefinition)
+        local ab = (role == "tank") and btn.tankAbility or btn.dpsAbility
+        applyAbilityToButton(btn, ab)
+    end
     self:Tick()
 end
 
@@ -1411,8 +1478,10 @@ function AB:RefreshLayout()
     if not self.buttons then return end
     if InCombatLockdown() then return end
     for i, btn in ipairs(self.buttons) do
-        btn:SetAttribute("macrotext-tank", setSlotMacro(btn, btn.tankAbility, "tank"))
-        btn:SetAttribute("macrotext-dps",  setSlotMacro(btn, btn.dpsAbility, "dps"))
+        btn.tankAbility = ns.Abilities.ResolveAbility(btn.tankAbilityDefinition)
+        btn.dpsAbility = ns.Abilities.ResolveAbility(btn.dpsAbilityDefinition)
+        btn:SetAttribute("macrotext-tank", setSlotMacro(btn, btn.tankAbilityDefinition, "tank"))
+        btn:SetAttribute("macrotext-dps",  setSlotMacro(btn, btn.dpsAbilityDefinition, "dps"))
     end
     for _, btn in ipairs(self.shoutButtons or {}) do
         if btn.currentAbility then
@@ -1435,13 +1504,21 @@ ns:On("PLAYER_LOGIN", function()
 end)
 ns:On("SPELLS_CHANGED",      function() AB:ResolveMeleeRef(); AB:RefreshLayout() end)
 ns:On("PLAYER_REGEN_ENABLED", function() AB:RefreshLayout() end)
-ns:On("PLAYER_ENTERING_WORLD",       function() AB:UpdateRanged(); AB:UpdateSwap() end)
+ns:On("PLAYER_ENTERING_WORLD", function()
+    AB:UpdateRanged()
+    AB:UpdateSwap()
+    AB:RefreshResolvedAbilities()
+end)
 ns:On("UNIT_INVENTORY_CHANGED", function(unit)
-    if unit == "player" then AB:UpdateRanged(); AB:UpdateSwap() end
+    if unit == "player" then
+        AB:UpdateRanged()
+        AB:UpdateSwap()
+        AB:RefreshResolvedAbilities()
+    end
 end)
 ns:On("UPDATE_SHAPESHIFT_FORM", function()
     maybePressFlash()
-    AB:Tick()
+    AB:RefreshResolvedAbilities()
 end)
 ns:On("UNIT_POWER_UPDATE", function(unit)
     if unit == "player" then AB:Tick() end

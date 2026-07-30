@@ -36,7 +36,17 @@ local function createStanceButton(parent, stanceId)
 
     btn:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText(STANCE_NAMES[stanceId])
+        -- Use Blizzard's normal spell tooltip so the stance description, rage
+        -- retention details, and any other client-provided text are included.
+        -- Prefer the learned spell's ID; the base ID is a safe fallback while
+        -- spellbook data is briefly unavailable during login/refresh events.
+        local spellID = select(7, GetSpellInfo(STANCE_NAMES[stanceId]))
+            or ns.Abilities.STANCE_SPELL_ID[stanceId]
+        if spellID then
+            GameTooltip:SetSpellByID(spellID)
+        else
+            GameTooltip:SetText(STANCE_NAMES[stanceId])
+        end
         GameTooltip:Show()
     end)
     btn:SetScript("OnLeave", GameTooltip_Hide)

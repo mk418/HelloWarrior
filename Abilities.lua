@@ -34,6 +34,10 @@ A.WORLD_BUFFS = {
 -- `prio_when` overrides prio when all listed buffs are present on the player.
 -- `talentOnly = true` → button is hidden if the spell isn't in the spellbook
 --                      (baseline spells the player hasn't reached the level for show desaturated instead).
+-- `fallback = ability` → use this ability while the primary is unlearned,
+--                        or while its equipment + stance requirements are met
+--                        and the primary's stance requirement is not. The
+--                        secure macro is prepared for live combat transitions.
 -- `requiresShield = true` → the ability's flash only fires when a shield is equipped.
 -- `onNextSwing = true` → ability is queued for the next melee swing (Heroic
 --                       Strike / Cleave); the button shows a steady "queued"
@@ -95,6 +99,49 @@ A.unwantedBuffs = {
     },
 }
 
+-- Shared by the tank bar and by Pummel's levelling fallback in the DPS bar.
+-- Keeping this as one ability record also keeps its stance and interrupt rules
+-- identical in both places.
+local SHIELD_BASH = {
+    name = "Shield Bash", stance = { "defensive", "battle" }, requiresShield = true,
+    flash = { type = "interrupt", independent = true },
+}
+
+local function supportsCurrentStance(ability)
+    if not ability.stance or ability.stance == "any" then return true end
+    local current = GetShapeshiftForm()
+    if type(ability.stance) == "string" then
+        return current == A.STANCE_ID[ability.stance]
+    end
+    for _, stance in ipairs(ability.stance) do
+        if current == A.STANCE_ID[stance] then return true end
+    end
+    return false
+end
+
+-- Resolve a configured slot to the ability it should currently display/use.
+-- An unlearned primary falls back whenever the fallback can be equipped. Once
+-- both are learned, the fallback wins only when it works in the current stance
+-- and the primary does not. `ignoreEquipment` is used while preparing secure
+-- macrotext: an unlearned primary's fallback must already be installed before
+-- an in-combat shield swap, since protected attributes cannot then be rewritten.
+function A.ResolveAbility(ability, ignoreEquipment)
+    if not ability or not ability.fallback then return ability end
+    local primaryLearned = GetSpellInfo(ability.name) ~= nil
+    local fallback = ability.fallback
+    if not GetSpellInfo(fallback.name) then return ability end
+    if not ignoreEquipment and fallback.requiresShield
+        and not (IsEquippedItemType and IsEquippedItemType("Shields")) then
+        return ability
+    end
+    if not primaryLearned then return fallback end
+    if not ignoreEquipment and not supportsCurrentStance(ability)
+        and supportsCurrentStance(fallback) then
+        return fallback
+    end
+    return ability
+end
+
 -- Tank uses an EXPLICIT row layout (see A.tankRows); DPS keeps the auto-wrap.
 A.tank = {
     -- Row 1.
@@ -115,8 +162,7 @@ A.tank = {
     { name = "Taunt",          stance = "defensive" },
     { name = "Mocking Blow",   stance = "battle" },
     -- Row 2.
-    { name = "Shield Bash",    stance = { "defensive", "battle" }, requiresShield = true,
-      flash = { type = "interrupt", independent = true } },
+    SHIELD_BASH,
     { name = "Death Wish",     stance = "any", talentOnly = true, noStartAttack = true },
     { name = "Berserker Rage", stance = "berserker", noStartAttack = true },
     { name = "Disarm",         stance = "defensive" },
@@ -157,7 +203,7 @@ A.dps = {
     { name = "Heroic Strike",  stance = "any",       onNextSwing = true, rageDump = true, flash = { type = "rage", threshold = 50 }, prio = 5 },
     { name = "Cleave",         stance = "any", onNextSwing = true, rageDump = true },
     -- Utility / cooldowns.
-    { name = "Pummel",         stance = "berserker",
+    { name = "Pummel",         stance = "berserker", fallback = SHIELD_BASH,
       flash = { type = "interrupt", independent = true } },
     { name = "Death Wish",     stance = "any", talentOnly = true, noStartAttack = true },
     { name = "Berserker Rage", stance = "berserker", noStartAttack = true },

@@ -281,7 +281,8 @@ function Helper:Compute(role)
     local optimalAffordable, optAffPrio = nil, math.huge
     local topRuleMet, topRuleMetPrio = nil, math.huge
 
-    for _, ab in ipairs(list) do
+    for _, configuredAbility in ipairs(list) do
+        local ab = ns.Abilities.ResolveAbility(configuredAbility)
         if ab.flash and ab.flash.type ~= "helper" and not ab.flash.independent and evaluateFlash(ab) then
             local p = resolvePriority(ab) or math.huge
             -- On-next-swing abilities (Heroic Strike / Cleave) are off the GCD:
@@ -310,7 +311,8 @@ function Helper:Compute(role)
     end
 
     local results = {}
-    for _, ab in ipairs(list) do
+    for _, configuredAbility in ipairs(list) do
+        local ab = ns.Abilities.ResolveAbility(configuredAbility)
         local r = { soft = false, hard = false }
         if ab.flash and ab.flash.type == "helper" then
             r.soft = bloodrageFlash
