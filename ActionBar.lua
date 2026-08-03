@@ -1292,8 +1292,9 @@ local function applyFlash(btn, flash)
 end
 
 -- Stack readout for an ability whose flash is a STACKING nodebuff (Sunder Armor:
--- "3/5"). Reads the same player-applied count the flash uses, so the number and
--- the glow agree. Colour-codes status: red at 0 (start stacking), yellow while
+-- "3/5"). Reads the same shared target count the flash uses, so applications by
+-- other warriors update the number and the glow. Colour-codes status: red at 0
+-- (start stacking), yellow while
 -- building, green at the cap (stop -- the flash is already off there). Hidden
 -- when the ability isn't a stacking nodebuff, or with no attackable target.
 local function updateStackReadout(btn, ab)

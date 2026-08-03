@@ -104,29 +104,34 @@ local function targetDebuffStacks(spellName)
     if not UnitExists("target") then return 0 end
     if GetAuraDataByIndex then
         for i = 1, 40 do
-            local aura = GetAuraDataByIndex("target", i, "HARMFUL|PLAYER")
+            -- Sunder Armor is a shared stack: applications from every warrior
+            -- contribute to the same target debuff.  Do not use the PLAYER
+            -- filter here or stacks added by group members disappear from the
+            -- readout (and keep the maintenance glow active past five stacks).
+            local aura = GetAuraDataByIndex("target", i, "HARMFUL")
             if not aura then break end
             if aura.name == spellName then return aura.applications or 1 end
         end
         return 0
     end
     for i = 1, 40 do
-        local n, _, count = UnitDebuff("target", i, "PLAYER")
+        local n, _, count = UnitDebuff("target", i)
         if not n then break end
         if n == spellName then return count or 1 end
     end
     return 0
 end
 
--- Public accessor for the same player-applied debuff-stack count the nodebuff
--- flash uses, so the on-button stack readout (e.g. Sunder) stays in lockstep
--- with the flash it sits next to.
+-- Public accessor for the same target debuff-stack count the nodebuff flash
+-- uses, so the on-button stack readout (e.g. Sunder) stays in lockstep with the
+-- flash it sits next to. Shared debuffs include applications from other players.
 function Helper:TargetDebuffStacks(spellName)
     return targetDebuffStacks(spellName)
 end
 
--- (start, duration) of a player-applied debuff on the target, for driving the
--- button's cooldown sweep as a "time until it drops off" timer (Sunder Armor).
+-- (start, duration) of a debuff on the target, for driving the button's cooldown
+-- sweep as a "time until it drops off" timer (Sunder Armor). Shared debuffs are
+-- intentionally not filtered by caster, so another warrior's refresh is shown.
 -- Returns nil when the debuff is absent or has no running duration. Reads the
 -- NAMED C_UnitAuras fields (.expirationTime/.duration) -- the positional
 -- UnitDebuff tuple is ambiguous on 1.15.x (see playerBuffRemaining). start is in
@@ -134,7 +139,7 @@ end
 function Helper:TargetDebuffTimer(spellName)
     if not UnitExists("target") or not GetAuraDataByIndex then return nil end
     for i = 1, 40 do
-        local aura = GetAuraDataByIndex("target", i, "HARMFUL|PLAYER")
+        local aura = GetAuraDataByIndex("target", i, "HARMFUL")
         if not aura then break end
         if aura.name == spellName then
             local exp, dur = aura.expirationTime, aura.duration
