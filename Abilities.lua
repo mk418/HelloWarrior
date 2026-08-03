@@ -142,13 +142,14 @@ function A.ResolveAbility(ability, ignoreEquipment)
     return ability
 end
 
--- Tank uses an EXPLICIT row layout (see A.tankRows); DPS keeps the auto-wrap.
+-- These role lists drive recommendation order. A.roleSlots below separately
+-- maps their entries onto stable cross-role shortcut cells.
 A.tank = {
-    -- Row 1.
+    -- Primary rotation and taunts.
     { name = "Revenge",        stance = "defensive", flash = { type = "proc" }, prio = 1 },
     -- Bloodthirst (Fury) / Mortal Strike (Arms) / Shield Slam (Prot) are the
-    -- three mutually-exclusive 31-point talents: you can train at most one, so
-    -- exactly the one you have shows here and the other two collapse.
+    -- three mutually-exclusive 31-point talents: you can train at most one, and
+    -- all three use the same reserved shortcut cell.
     { name = "Bloodthirst",    stance = "any", talentOnly = true,
       flash = { type = "off_cd" }, prio = 3 },
     { name = "Mortal Strike",  stance = "battle", talentOnly = true,
@@ -161,7 +162,7 @@ A.tank = {
     { name = "Cleave",         stance = "any", onNextSwing = true, rageDump = true },
     { name = "Taunt",          stance = "defensive" },
     { name = "Mocking Blow",   stance = "battle" },
-    -- Row 2.
+    -- Defensive utility.
     SHIELD_BASH,
     { name = "Death Wish",     stance = "any", talentOnly = true, noStartAttack = true },
     { name = "Berserker Rage", stance = "berserker", noStartAttack = true },
@@ -169,7 +170,7 @@ A.tank = {
     { name = "Concussion Blow", stance = "any", talentOnly = true },
     { name = "Shield Block",   stance = "defensive", requiresShield = true, noStartAttack = true,
       flash = { type = "off_cd", independent = true } },
-    -- Row 3.
+    -- Rage, movement, and long cooldowns.
     { name = "Bloodrage",      stance = "any",       flash = { type = "helper" }, noStartAttack = true },
     { name = "Charge",         stance = "battle", noStartAttack = true },
     { name = "Intercept",      stance = "berserker", noStartAttack = true },
@@ -177,20 +178,13 @@ A.tank = {
     { name = "Shield Wall",    stance = "defensive", noStartAttack = true },
 }
 
--- Explicit per-row sizes for the tank bar, in A.tank order; must sum to #A.tank.
--- Hidden talents collapse WITHIN their own row, so the rows stay grouped as
--- listed above regardless of spec (DPS instead auto-wraps at ABILITIES_PER_ROW).
--- Row 1 holds 9 entries but only ever shows 7 (two of the three 31-pt talents
--- always collapse), so it still fits the 7-wide bar.
-A.tankRows = { 9, 6, 5 }
-
 A.dps = {
     -- Core rotation, highest priority first (leftmost = flashed first).
     { name = "Execute",        stance = { "berserker", "battle" },
       flash = { type = "target_hp", lt = 20 }, prio = 1,
       prio_when = { { buffs = { "Rallying Cry of the Dragonslayer", "Spirit of Zandalar" }, prio = 2 } } },
-    -- Bloodthirst (Fury) and Mortal Strike (Arms) are mutually exclusive, so
-    -- whichever you've trained shows here and the other's slot collapses away.
+    -- Bloodthirst (Fury) and Mortal Strike (Arms) are mutually exclusive and
+    -- share one reserved shortcut cell.
     { name = "Bloodthirst",    stance = "any", talentOnly = true,
       flash = { type = "off_cd" }, prio = 2,
       prio_when = { { buffs = { "Rallying Cry of the Dragonslayer", "Spirit of Zandalar" }, prio = 1 } } },
@@ -217,4 +211,35 @@ A.dps = {
     { name = "Intercept",      stance = "berserker", noStartAttack = true },
     { name = "Retaliation",    stance = "battle", noStartAttack = true },
     { name = "Recklessness",   stance = "berserker", noStartAttack = true },
+}
+
+-- Stable cross-role shortcut slots. Each side lists one ability name, except
+-- slot 2 where the mutually-exclusive 31-point talents share the reservation.
+-- Exact shared abilities deliberately occupy the same slot in both roles; the
+-- two interrupt variants share slot 8 as the same muscle-memory action.
+--
+-- A talent-only ability that is not learned leaves its reserved cell empty.
+-- Keeping that hole is intentional: collapsing it would shift every later key
+-- and make the same ability move between roles or specs again.
+A.roleSlots = {
+    { tank = { "Revenge" },                                  dps = { "Execute" } },
+    { tank = { "Bloodthirst", "Mortal Strike", "Shield Slam" },
+      dps  = { "Bloodthirst", "Mortal Strike" } },
+    { tank = { "Taunt" },                                    dps = { "Whirlwind" } },
+    { tank = { "Mocking Blow" },                             dps = { "Overpower" } },
+    { tank = { "Sunder Armor" },                            dps = { "Sunder Armor" } },
+    { tank = { "Heroic Strike" },                           dps = { "Heroic Strike" } },
+    { tank = { "Cleave" },                                  dps = { "Cleave" } },
+    { tank = { "Shield Bash" },                             dps = { "Pummel" } },
+    { tank = { "Death Wish" },                              dps = { "Death Wish" } },
+    { tank = { "Berserker Rage" },                          dps = { "Berserker Rage" } },
+    { tank = { "Disarm" },                                  dps = { "Disarm" } },
+    { tank = { "Concussion Blow" },                         dps = { "Hamstring" } },
+    { tank = { "Shield Block" },                            dps = { "Thunder Clap" } },
+    { tank = {},                                              dps = { "Slam" } },
+    { tank = { "Bloodrage" },                               dps = { "Bloodrage" } },
+    { tank = { "Charge" },                                  dps = { "Charge" } },
+    { tank = { "Intercept" },                               dps = { "Intercept" } },
+    { tank = { "Last Stand" },                              dps = { "Retaliation" } },
+    { tank = { "Shield Wall" },                             dps = { "Recklessness" } },
 }

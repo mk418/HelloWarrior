@@ -6,7 +6,7 @@ A lean, opinionated ability manager for WoW Classic Era Warriors. It lays out yo
 
 ## What it does
 
-- **Role-adaptive bars.** One click swaps the whole bar between DPS and tank layouts; abilities you haven't talented collapse away so you only see what you can use.
+- **Role-adaptive bars.** One click swaps the whole bar between DPS and tank layouts. Shared actions keep the same shortcut in both modes; unavailable talent slots stay empty so later keys never shift.
 - **Tells you what to press.** A gold ring marks the highest-value ability to use right now (Revenge / Bloodthirst / Sunder priority, Execute under 20%, proc windows for Overpower and Revenge, …); softer flashes mark the other valid options.
 - **Interrupt alert.** When your target starts an interruptible cast, Pummel (in Berserker) or Shield Bash (with a shield equipped) lights up while the kick is off cooldown.
 - **Dances stances for you.** Abilities are wrapped in secure stance-dance macros, so e.g. Whirlwind works from any stance. Hold **Ctrl** as DPS to dance into Berserker for abilities that allow it.
@@ -15,7 +15,7 @@ A lean, opinionated ability manager for WoW Classic Era Warriors. It lays out yo
 - **Racial + ranged button.** Your race's active racial (Stoneform, Blood Fury, War Stomp, …) and a weapon-adaptive ranged-pull button sit on the shouts row. Shooting also starts melee auto-attack for when the target closes the gap.
 - **Cast bar.** Its own, at the top of the cluster, so it never draws through the ability grid the way Blizzard's centred one does. HelloUI hides Blizzard's while it's up; `/hw castbar off` hands it back.
 - **In-combat shield swap.** One button flips your off-hand between your weapon and a shield — shield up for a dangerous moment, then back to dual-wield, mid-fight. It only touches the off-hand, so your main-hand swing timer keeps ticking.
-- **Your keybinds.** Bind keys to on-screen slots with a hover-and-press editor; the binding follows the visible button as the layout collapses.
+- **Your keybinds.** Bind keys to fixed on-screen slots with a hover-and-press editor; shared tank/DPS actions keep the same key through role swaps.
 
 ## Usage
 

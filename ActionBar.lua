@@ -225,6 +225,40 @@ local function isHidden(ability)
     return false
 end
 
+-- Resolve the explicit cross-role slot schema to configured ability records.
+-- Shared actions use the same schema index in both roles, so they retain both
+-- their physical cell and shortcut. Talent alternatives share a reservation;
+-- an unlearned reservation stays nil instead of shifting every later action.
+-- Any future ability omitted from the schema is appended rather than lost.
+local function roleSlotAbilities(role)
+    local abilities = ns.Abilities[role]
+    local byName, covered = {}, {}
+    for _, ability in ipairs(abilities) do
+        byName[ability.name] = ability
+    end
+
+    local schema = ns.Abilities.roleSlots or {}
+    local slots = {}
+    for i, spec in ipairs(schema) do
+        for _, name in ipairs(spec[role] or {}) do
+            covered[name] = true
+            local ability = byName[name]
+            if not slots[i] and ability and not isHidden(ability) then
+                slots[i] = ability
+            end
+        end
+    end
+
+    local nextSlot = #schema + 1
+    for _, ability in ipairs(abilities) do
+        if not covered[ability.name] and not isHidden(ability) then
+            slots[nextSlot] = ability
+            nextSlot = nextSlot + 1
+        end
+    end
+    return slots, nextSlot - 1
+end
+
 -- ---------- per-button UI --------------------------------------------------
 
 local function stanceIconTexture(sid)
@@ -481,6 +515,25 @@ local function setSlotMacro(btn, ability, role)
     return buildMacro(ability, role)
 end
 
+-- Assign each role's stable shortcut schema to the same fixed button ordinals.
+-- This is protected configuration and therefore only called while building the
+-- bar or refreshing it out of combat.
+local function configureRoleSlots(buttons)
+    local tankSlots, tankCount = roleSlotAbilities("tank")
+    local dpsSlots, dpsCount = roleSlotAbilities("dps")
+    for i, btn in ipairs(buttons) do
+        local tankAb = tankSlots[i]
+        local dpsAb = dpsSlots[i]
+        btn.tankAbilityDefinition = tankAb
+        btn.dpsAbilityDefinition = dpsAb
+        btn.tankAbility = ns.Abilities.ResolveAbility(tankAb)
+        btn.dpsAbility = ns.Abilities.ResolveAbility(dpsAb)
+        btn:SetAttribute("macrotext-tank", setSlotMacro(btn, tankAb, "tank"))
+        btn:SetAttribute("macrotext-dps", setSlotMacro(btn, dpsAb, "dps"))
+    end
+    return math.max(tankCount, dpsCount)
+end
+
 local function applyAbilityToButton(btn, ability)
     if not ability or isHidden(ability) then
         btn.currentAbility = nil
@@ -520,7 +573,7 @@ function AB:Build()
     for _, ab in ipairs((ns.Abilities.racials and ns.Abilities.racials[raceToken]) or {}) do
         if GetSpellInfo(ab.name) then racialAbils[#racialAbils + 1] = ab end
     end
-    local maxAbil = math.max(#tankAbils, #dpsAbils)
+    local maxAbil = math.max(#tankAbils, #dpsAbils, #(ns.Abilities.roleSlots or {}))
     local rows = math.ceil(maxAbil / ABILITIES_PER_ROW)
     local rowWidth = ABILITIES_PER_ROW * BUTTON_SIZE + (ABILITIES_PER_ROW - 1) * BUTTON_GAP
     local abilitiesHeight = rows * BUTTON_SIZE + (rows - 1) * ROW_GAP
@@ -572,7 +625,9 @@ function AB:Build()
     bar:SetPoint("TOP", container, "TOP", 0, -(headerHeight + SECTION_GAP + BUTTON_SIZE + SECTION_GAP))
     self.bar = bar
 
-    -- Create one button per slot up to maxAbil.
+    -- Create enough physical buttons for the longest unfiltered role list.
+    -- configureRoleSlots below assigns both roles to the same shortcut schema,
+    -- leaving unused/talent-only reservations hidden.
     self.buttons = {}
     for i = 1, maxAbil do
         local nameSuffix = string.format("Slot%02d", i)
@@ -583,19 +638,12 @@ function AB:Build()
             col * (BUTTON_SIZE + BUTTON_GAP),
             -row * (BUTTON_SIZE + ROW_GAP))
 
-        local tankAb = tankAbils[i]
-        local dpsAb  = dpsAbils[i]
-        btn.tankAbilityDefinition = tankAb
-        btn.dpsAbilityDefinition = dpsAb
-        btn.tankAbility = ns.Abilities.ResolveAbility(tankAb)
-        btn.dpsAbility = ns.Abilities.ResolveAbility(dpsAb)
-        btn:SetAttribute("macrotext-tank", setSlotMacro(btn, tankAb, "tank"))
-        btn:SetAttribute("macrotext-dps",  setSlotMacro(btn, dpsAb, "dps"))
         btn:SetAttribute("type", "macro")
 
         bar:SetFrameRef("btn" .. i, btn)
         self.buttons[i] = btn
     end
+    self.maxRoleSlots = configureRoleSlots(self.buttons)
     bar:SetAttribute("btnCount", maxAbil)
 
     bar:SetAttribute("baseRole", HelloWarriorCharDB.role or "dps")
@@ -616,7 +664,7 @@ function AB:Build()
             end
         end
         -- Set effectiveRole LAST: the insecure OnAttributeChanged hook it fires
-        -- (-> OnRoleApplied -> Relayout) must see the settled Show/Hide state.
+        -- updates icons/glows and must see the settled Show/Hide state.
         self:SetAttribute("effectiveRole", effective)
     ]])
 
@@ -938,51 +986,30 @@ local function rowSpan(n)
     return n * BUTTON_SIZE + (n - 1) * BUTTON_GAP
 end
 
--- Collapse the gaps left by hidden buttons and centre each (partial) row. These
--- are secure buttons, so SetPoint is illegal in combat: this no-ops during
--- combat and re-runs on the next role/talent change or PLAYER_REGEN_ENABLED.
+-- Place the shared shortcut schema once. Role swaps never change these points:
+-- protected SetPoint calls are not legal in combat, and leaving button N fixed
+-- also keeps its override binding correct. Future abilities omitted from the
+-- schema may extend the final row during an out-of-combat refresh.
 function AB:Relayout()
     if InCombatLockdown() then return end
 
-    -- Ability grid. DPS auto-wraps at ABILITIES_PER_ROW; tank uses explicit rows
-    -- (A.tankRows) so its row breaks are fixed regardless of which talents show.
+    -- Ability grid: every role uses the same fixed 7-wide shortcut layout.
+    -- Unavailable or role-specific reservations remain as intentional holes.
     if self.buttons and self.bar then
         local fullWidth = rowSpan(ABILITIES_PER_ROW)
-        local rowIdx = 0
-        local function emit(row)
-            if #row > 0 then
-                placeRow(row, self.bar, (fullWidth - rowSpan(#row)) / 2,
-                    -rowIdx * (BUTTON_SIZE + ROW_GAP))
-                rowIdx = rowIdx + 1
-            end
-        end
-        local role = self.bar:GetAttribute("effectiveRole") or HelloWarriorCharDB.role or "dps"
-        local explicit = (role == "tank") and ns.Abilities.tankRows or nil
-        if explicit then
-            -- Each defined row collapses its own hidden buttons and centres the rest.
-            local dataIdx = 1
-            for _, size in ipairs(explicit) do
-                local row = {}
-                for k = dataIdx, dataIdx + size - 1 do
-                    local b = self.buttons[k]
-                    if b and b:IsShown() then row[#row + 1] = b end
-                end
-                emit(row)
-                dataIdx = dataIdx + size
-            end
-        else
-            local vis = {}
-            for _, b in ipairs(self.buttons) do
-                if b:IsShown() then vis[#vis + 1] = b end
-            end
-            local i = 1
-            while i <= #vis do
-                local n = math.min(ABILITIES_PER_ROW, #vis - i + 1)
-                local row = {}
-                for c = 0, n - 1 do row[c + 1] = vis[i + c] end
-                emit(row)
-                i = i + n
-            end
+        local maxVisible = self.maxRoleSlots or #self.buttons
+        for i, btn in ipairs(self.buttons) do
+            local row = math.floor((i - 1) / ABILITIES_PER_ROW)
+            local col = (i - 1) % ABILITIES_PER_ROW
+            local inRow = math.min(ABILITIES_PER_ROW,
+                math.max(0, maxVisible - row * ABILITIES_PER_ROW))
+            -- Buttons beyond the current maximum stay hidden, so their exact
+            -- point is immaterial. Give them a full-row point for future learns.
+            if inRow == 0 then inRow = ABILITIES_PER_ROW end
+            btn:ClearAllPoints()
+            btn:SetPoint("TOPLEFT", self.bar, "TOPLEFT",
+                (fullWidth - rowSpan(inRow)) / 2 + col * (BUTTON_SIZE + BUTTON_GAP),
+                -row * (BUTTON_SIZE + ROW_GAP))
         end
     end
 
@@ -1475,15 +1502,10 @@ local function maybePressFlash()
 end
 
 function AB:RefreshLayout()
-    -- Re-evaluate macrotexts (talent learns / respec).
+    -- Re-resolve stable role slots and macrotexts (talent learns / respec).
     if not self.buttons then return end
     if InCombatLockdown() then return end
-    for i, btn in ipairs(self.buttons) do
-        btn.tankAbility = ns.Abilities.ResolveAbility(btn.tankAbilityDefinition)
-        btn.dpsAbility = ns.Abilities.ResolveAbility(btn.dpsAbilityDefinition)
-        btn:SetAttribute("macrotext-tank", setSlotMacro(btn, btn.tankAbilityDefinition, "tank"))
-        btn:SetAttribute("macrotext-dps",  setSlotMacro(btn, btn.dpsAbilityDefinition, "dps"))
-    end
+    self.maxRoleSlots = configureRoleSlots(self.buttons)
     for _, btn in ipairs(self.shoutButtons or {}) do
         if btn.currentAbility then
             if isHidden(btn.currentAbility) then

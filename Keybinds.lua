@@ -4,8 +4,10 @@ ns.Keybinds = {}
 local KB = ns.Keybinds
 
 -- Keybindings "follow the bar": a key is bound to a POSITION (reading order over
--- the visible buttons), not to a fixed slot. When hidden talents/role swaps
--- collapse the row, position N just points at whatever button now sits there.
+-- the fixed shortcut grid), not to a configured ability. Shared actions reserve
+-- the same position in BOTH roles, while role-specific actions share a cell with
+-- their counterpart. An in-combat role swap can therefore change the prepared
+-- action without moving the button or invalidating this binding.
 --
 -- The cast itself is fired by WoW's secure "CLICK <frame>:<button>" override
 -- binding: pressing the key makes the engine click the named secure button, so
@@ -19,9 +21,8 @@ local owner = CreateFrame("Frame", "HelloWarrior_BindOwner")
 
 -- Defaults: number row 1..7 for the top row, then Shift+ for the rows beneath
 -- it -- Shift+1..7, continuing onto Shift+8/9/0/-/= so the bottom row is covered
--- too. (Positions are a flat reading-order list; rows differ in width by role,
--- so this spans both the dps and tank bottom rows.) The shouts row and anything
--- past these stay unbound until assigned. Stored per-character.
+-- too. Positions are fixed shortcut cells shared by both roles. The shouts row
+-- and anything past these stay unbound until assigned. Stored per-character.
 local function defaults()
     return {
         ability = {
@@ -75,16 +76,10 @@ local function mouseFocus()
     if GetMouseFocus then return GetMouseFocus() end
 end
 
--- Visible ability buttons in reading order (= slot order; rows are contiguous
--- slices of slot order, so filtering shown buttons reproduces the layout order).
+-- Ability buttons in stable shortcut order. Hidden talent/role reservations
+-- remain in the list so later keys and mouse-edit positions never shift.
 local function orderedAbility(AB)
-    local t = {}
-    if AB.buttons then
-        for _, b in ipairs(AB.buttons) do
-            if b:IsShown() then t[#t + 1] = b end
-        end
-    end
-    return t
+    return AB.buttons or {}
 end
 
 -- Bottom row in reading order: ranged button first (when shown), then shouts,
@@ -137,7 +132,10 @@ function KB:Apply()
             end
         end
     end
-    bind(kb.ability, orderedAbility(AB))
+    -- Bind every configured ordinal to its permanent button, including slots
+    -- hidden by the current role/talents. If the other role exposes one during
+    -- combat, its binding is already installed.
+    bind(kb.ability, AB.buttons)
     bind(kb.shout, orderedShout(AB))
 end
 
@@ -151,8 +149,8 @@ function KB:SetLabel(btn, key)
     btn._hwKeyLabel:SetText(key and shortKey(key) or "")
 end
 
--- Paint each visible button with the hotkey for its current position; clear the
--- text on hidden buttons so a collapsed slot doesn't show a stale key.
+-- Paint each visible button with its reserved hotkey; clear text on hidden
+-- reservations so an unavailable talent does not leave a floating label.
 function KB:RefreshLabels()
     local AB = ns.ActionBar
     if not AB or not AB.buttons then return end

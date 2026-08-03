@@ -26,13 +26,13 @@ A lean, opinionated ability manager for World of Warcraft Classic Era Warriors. 
         │ [ranged] [Battle][Demo][Intim] [racial] [swap]│  shouts, racials, off-hand swap
         ├───────────────────────────────────────────────┤
         │ [■][■][■][■][■][■][■]                          │  ability grid
-        │ [■][■][■][■][■][■][■]                          │  (role-adaptive, collapses
-        │ [■][■][■][■][■]                                │   hidden talents)
+        │ [■][■][■][■][■][■][■]                          │  (role-adaptive, stable
+        │ [■][■][■][■][■]                                │   shortcut slots)
         └───────────────────────────────────────────────┘
 ```
 
 - One **draggable container** holds everything; **locked by default** (`/hw pos unlock` to move, a faint backdrop marks "move mode").
-- The **ability grid** swaps its whole macro set between DPS and tank via a secure snippet; hidden talents collapse within each row. DPS auto-wraps at 7/row; tank uses an explicit row layout.
+- The **ability grid** swaps its whole macro set between DPS and tank via a secure snippet. Shared abilities reserve identical shortcut slots in both roles (and Pummel pairs with Shield Bash); unavailable talents leave deliberate holes so the shared 7-wide layout and every later key stay stable during combat swaps.
 - The **shouts row** carries the shouts, a weapon-adaptive ranged button, the player's **own race racials** (Stoneform, Blood Fury, …) appended after the shouts, and an **off-hand swap** button at the end.
 - The **header** packs the stance buttons (left), the role toggle (right), and a stacked **rage bar + swing timer** between them.
 - The **cast bar** sits directly above the header band, i.e. over the rage bar; the range readout moves above it. It is **195x13 — Blizzard's own player cast bar size** — centred, not stretched across the container: HelloUI restyles Blizzard's frame to match this one for every non-Warrior, and two bars meant to look like the same bar should not differ in size depending on which addon drew them. (It also stops the bar changing width per race, since the container's width follows the racial count.) Both font strings are small for the same reason a 13px bar demands: a full-size font's ink stands proud of the bar. It started one slot higher and read as a separate thing floating away from the cluster — a single word does not mind that distance, a bar you are timing against does. Switching the bar off returns the readout to the container's top edge. It exists because Blizzard's player cast bar is centred in the strip this cluster occupies, and moving Blizzard's is the hard version of that problem — it is an Edit Mode system, so an anchor set from outside is reverted every time Edit Mode closes. Drawing our own is cheaper, and HelloUI switches Blizzard's off while ours is on screen (through the client's own `SetAndUpdateShowCastbar`, the call it uses when an overlay bar replaces the player's). Warriors cast almost nothing, so in practice this shows bandages, mounts, hearthstones and food — still worth having, since a bandage broken by a dot is a real cost. `/hw castbar off` gives Blizzard's back.
@@ -40,7 +40,7 @@ A lean, opinionated ability manager for World of Warcraft Classic Era Warriors. 
 ## Current scope (implemented)
 
 **Casting & layout**
-- Role-adaptive DPS/tank bars; one secure button per slot, macro swapped by a `SecureHandlerStateTemplate` snippet on role toggle.
+- Role-adaptive DPS/tank bars; one stable secure button per shortcut slot, with its prebuilt role macro swapped by a `SecureHandlerStateTemplate` snippet on role toggle.
 - **Stance-dance macros** — `/cast [nostance:N] <Stance>` then `/cast <Ability>`, so abilities work from any stance. DPS holds **Ctrl** to opt into a Berserker dance (a secure button can't read rage, so the rage-losing switch is opt-in); tanks always dance into Defensive where applicable.
 - Single click-edge (`AnyUp`) so a press fires the macro once (not twice).
 - **Buff auto-cancel** — ability macros `/cancelaura` wasted caster blessings (and Salvation for tanks) so they fall off as you engage.
@@ -60,7 +60,7 @@ A lean, opinionated ability manager for World of Warcraft Classic Era Warriors. 
 - **Per-button out-of-range red tint**, GCD + cooldown sweeps, **queued-on-next-swing** autocast shine on Heroic Strike / Cleave, **active-stance** shine, rage/usability icon tint, stance-requirement corner badges, and a **Sunder Armor readout** — a big stack count centred on the button in WoW's cooldown-timer typeface (Friz Quadrata, outlined) (colour-coded red→yellow→green toward the 5-stack cap), with the button's **cooldown sweep driven by the Sunder debuff's remaining time** so you watch it run out and see when it's about to drop off. (Numeric cooldown countdowns are suppressed on the addon's buttons — Blizzard's built-in via `SetHideCountdownNumbers`, and OmniCC / tullaCC via the `noCooldownCount` flag they read on the cooldown frame — so the radial sweep and the centred count are the only things there.)
 
 **Controls**
-- Addon-managed, **position-following keybindings** (override `CLICK` bindings remapped to whatever button sits in each on-screen slot), with a hover-and-press editor (`/hw keys`); disabled while the bars are hidden.
+- Addon-managed, **stable-slot keybindings** (override `CLICK` bindings target reserved shortcut cells whose prepared actions change with the role), with a hover-and-press editor (`/hw keys`); disabled while the bars are hidden.
 - Position lock/unlock/reset; show/hide the addon bars.
 
 ## Out of scope
@@ -92,10 +92,10 @@ HelloWarrior/
 ├── SwingTimer.lua          -- main-hand swing timer
 ├── CastBar.lua             -- our own player cast bar (HelloUI hides Blizzard's
 │                              while it exists; detection is by frame, not addon)
-└── Keybinds.lua            -- position-following override bindings + keybind mode
+└── Keybinds.lua            -- stable-slot override bindings + keybind mode
 ```
 
-Unlike HelloTotems (which ships a `Bindings.xml`), HelloWarrior binds at runtime via `SetOverrideBindingClick` so keys can follow the *visible* slot as hidden talents collapse the layout.
+Unlike HelloTotems (which ships a `Bindings.xml`), HelloWarrior binds at runtime via `SetOverrideBindingClick`. Each key targets a permanent secure shortcut cell, so role swaps change that cell's prepared macro without remapping bindings during combat.
 
 ## Technical foundation
 
